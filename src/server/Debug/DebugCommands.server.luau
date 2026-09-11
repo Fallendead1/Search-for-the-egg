@@ -14,9 +14,12 @@
 		/debugcash <dollars>      Add Cash to your CURRENT run (e.g. /debugcash 20)
 		/debuggems <amount>       Add Gems to your persistent profile
 		/debugtokens <amount>     Add Alien Tokens to your persistent profile
+		/debugwins <amount>       Add Wins to your persistent profile
 		/debugexposeegg           Instantly exposes the Egg in your current run
 		/debugclearpile           Clears a huge radius of your run's pile (also
 		                          exposes the Egg if it's inside that radius)
+		/debugowntool <ToolName>  Grants this-run ownership of Pitchfork/Dynamite/
+		                          Vacuum/Drone without spending Cash/Gems
 		/debughelp                Lists these commands in the Output window
 
 	All amounts are added via the real Core services (CurrencyService.Award
@@ -41,17 +44,27 @@ local Gameplay = ServerScriptService.SearchForTheEgg.Gameplay
 
 local CurrencyService = require(Core.CurrencyService)
 local DataService = require(Core.DataService)
+local StatsService = require(Core.StatsService)
 local RunPlayerStateService = require(Gameplay.RunPlayerStateService)
 local RoundService = require(Gameplay.RoundService)
 local FeatherPileService = require(Gameplay.FeatherPileService)
 local EggService = require(Gameplay.EggService)
 
+local OWNABLE_TOOLS = {
+	Pitchfork = true,
+	Dynamite = true,
+	Vacuum = true,
+	Drone = true,
+}
+
 local HELP_LINES = {
 	"[DEBUG] /debugcash <dollars> -- add Cash to your current run",
 	"[DEBUG] /debuggems <amount> -- add Gems to your profile",
 	"[DEBUG] /debugtokens <amount> -- add Alien Tokens to your profile",
+	"[DEBUG] /debugwins <amount> -- add Wins to your profile",
 	"[DEBUG] /debugexposeegg -- instantly expose your run's Egg",
 	"[DEBUG] /debugclearpile -- clear a huge radius of your run's pile",
+	"[DEBUG] /debugowntool <Pitchfork|Dynamite|Vacuum|Drone> -- grant this-run ownership",
 	"[DEBUG] /debughelp -- list these commands",
 }
 
@@ -132,6 +145,42 @@ local function handleClearPile(player: Player)
 	notify(player, ("Cleared %d Feather units from the pile."):format(cleared))
 end
 
+local function handleGiveWins(player: Player, argument: string?)
+	local amount = tonumber(argument) or 1
+	if amount <= 0 or amount ~= math.floor(amount) then
+		notify(player, "Usage: /debugwins <whole number amount, e.g. 1>")
+		return
+	end
+	if not DataService.IsLoaded(player) then
+		notify(player, "Profile not loaded yet -- try again in a moment.")
+		return
+	end
+	StatsService.IncrementWins(player, amount)
+	DataService.PushProfileUpdated(player)
+	notify(player, ("+%d Wins added to your profile."):format(amount))
+end
+
+local function handleOwnTool(player: Player, argument: string?)
+	local toolName = argument and (argument:sub(1, 1):upper() .. argument:sub(2):lower())
+	if not toolName or not OWNABLE_TOOLS[toolName] then
+		notify(player, "Usage: /debugowntool <Pitchfork|Dynamite|Vacuum|Drone>")
+		return
+	end
+
+	local state = RunPlayerStateService.Get(player)
+	if not state then
+		notify(player, "No active run -- join/start a Chapter 1 run first.")
+		return
+	end
+
+	-- Same mutation ToolService's RunProduct grant handler performs for a
+	-- real Robux one-round purchase -- this is a shortcut to that same
+	-- state, not a parallel/fake ownership flag.
+	state.Tools[toolName].Ownership = "RunOwned"
+	RoundService.BroadcastPlayerState(player)
+	notify(player, (toolName .. " granted for this run (debug)."))
+end
+
 local COMMANDS: { [string]: (player: Player, argument: string?) -> () } = {
 	["/debugcash"] = handleGiveCash,
 	["/debuggems"] = function(player, argument)
@@ -140,12 +189,14 @@ local COMMANDS: { [string]: (player: Player, argument: string?) -> () } = {
 	["/debugtokens"] = function(player, argument)
 		handleGiveCurrency(player, "AlienTokens", argument)
 	end,
+	["/debugwins"] = handleGiveWins,
 	["/debugexposeegg"] = function(player, _argument)
 		handleExposeEgg(player)
 	end,
 	["/debugclearpile"] = function(player, _argument)
 		handleClearPile(player)
 	end,
+	["/debugowntool"] = handleOwnTool,
 	["/debughelp"] = function(player, _argument)
 		for _, line in ipairs(HELP_LINES) do
 			print(line)

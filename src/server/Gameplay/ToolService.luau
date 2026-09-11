@@ -154,24 +154,35 @@ function ToolService.BuyUpgrade(player: Player, toolName: string, trackName: str
 	return true
 end
 
+local DRONE_GEMS_FAILURE_MESSAGES: { [string]: string } = {
+	RoundNotActive = "Start a run first.",
+	NoRunState = "Start a run first.",
+	AlreadyOwned = "Drone already deployed this run.",
+	InsufficientGems = "Not enough Gems for that.",
+}
+
 -- Drone's alternate 40-Gem run-ownership purchase.
 function ToolService.BuyDroneWithGems(player: Player)
 	local run = RoundService.GetRunForPlayer(player)
 	if not RoundService.IsActive(run) then
+		RoundService.SendNotification(player, DRONE_GEMS_FAILURE_MESSAGES.RoundNotActive, "Error")
 		return false, "RoundNotActive"
 	end
 
 	local state = RunPlayerStateService.Get(player)
 	if not state then
+		RoundService.SendNotification(player, DRONE_GEMS_FAILURE_MESSAGES.NoRunState, "Error")
 		return false, "NoRunState"
 	end
 	if ToolService.IsOwned(state, "Drone") then
+		RoundService.SendNotification(player, DRONE_GEMS_FAILURE_MESSAGES.AlreadyOwned, "Error")
 		return false, "AlreadyOwned"
 	end
 
 	local currency = CoreLocator.GetCurrencyService()
 	local spent = currency:TrySpend(player, "Gems", DroneConfig.ONE_ROUND_GEM_COST, "RunDrone")
 	if not spent then
+		RoundService.SendNotification(player, DRONE_GEMS_FAILURE_MESSAGES.InsufficientGems, "Error")
 		return false, "InsufficientGems"
 	end
 

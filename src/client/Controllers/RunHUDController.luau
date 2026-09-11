@@ -24,6 +24,16 @@ local RunHUDController = {}
 
 local TOOL_SLOTS = { "Hand", "Pitchfork", "Dynamite", "Drone", "Vacuum" }
 
+-- tool:sub(1, 1) used to label every hotbar slot -- Dynamite and Drone both
+-- start with "D", so two of the five slots were visually identical.
+local TOOL_HOTBAR_LABEL: { [string]: string } = {
+	Hand = "HAND",
+	Pitchfork = "FORK",
+	Dynamite = "TNT",
+	Drone = "DRONE",
+	Vacuum = "VAC",
+}
+
 local cashLabel: TextLabel
 local bagLabel: TextLabel
 local gemsLabel: TextLabel
@@ -129,7 +139,7 @@ local function buildHotbar(parent: Instance)
 
 	for _, tool in ipairs(TOOL_SLOTS) do
 		local button = Theme.newButton({
-			Text = tool:sub(1, 1),
+			Text = TOOL_HOTBAR_LABEL[tool] or tool,
 			Size = UDim2.new(0, 64, 0, 64),
 			Parent = hotbar,
 		})

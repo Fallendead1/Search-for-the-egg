@@ -60,6 +60,7 @@ local ChapterArrivalService = require(Gameplay.ChapterArrivalService)
 
 local ClassService = require(Core.ClassService)
 local LeaderboardService = require(Core.LeaderboardService)
+local AssetConfig = require(ReplicatedStorage.SearchForTheEgg.AssetConfig)
 
 -- ============================================================
 -- Minimal assertion harness
@@ -855,6 +856,51 @@ if exploitParty then
 		RoundService.EndRun(exploitRun)
 	end
 	check("exploit-test party cleaned up", PartyService.GetParty(exploitParty.PartyId) == nil)
+end
+
+-- ============================================================
+-- 31. Purchase-failure notifications (RunUpgradeService/ToolService route
+--     failures through RoundService.SendNotification, which now guards
+--     non-Instance callers -- see its comment -- specifically so THIS suite's
+--     fake players above can exercise those failure branches without a live
+--     Player to FireClient on; this suite checks that guard directly)
+-- ============================================================
+suite("PurchaseFailureNotification")
+check(
+	"SendNotification no-ops (doesn't error) for a fake non-Instance player",
+	pcall(RoundService.SendNotification, { UserId = -900130 }, "test", "Error")
+)
+
+-- ============================================================
+-- 32. AssetConfig placeholder scaffold (final-art-pass preparation --
+--     every id must stay 0 until a real asset pass fills them in; nothing
+--     here should ever be invented)
+-- ============================================================
+suite("AssetConfig")
+local function checkAllZero(tableName: string, assetTable: { [string]: number })
+	local nonZeroCount = 0
+	for key, id in pairs(assetTable) do
+		if id ~= 0 then
+			nonZeroCount += 1
+			warn(("[DebugTests] AssetConfig.%s.%s is non-zero (%d) -- was a real id invented?"):format(tableName, key, id))
+		end
+	end
+	checkEqual(("%s has no invented non-zero ids"):format(tableName), nonZeroCount, 0)
+end
+checkAllZero("ToolIcons", AssetConfig.ToolIcons)
+checkAllZero("CurrencyIcons", AssetConfig.CurrencyIcons)
+checkAllZero("ClassIcons", AssetConfig.ClassIcons)
+checkAllZero("Models", AssetConfig.Models)
+checkAllZero("SkinIcons", AssetConfig.SkinIcons)
+checkEqual("image(0) returns empty string", AssetConfig.image(0), "")
+checkEqual("image(nonzero) builds an rbxassetid:// url", AssetConfig.image(123), "rbxassetid://123")
+for _, classEntry in ipairs(ClassConfig.Odds) do
+	check(("ClassIcons has an entry for %s"):format(classEntry.Id), AssetConfig.ClassIcons[classEntry.Id] ~= nil)
+end
+for _, reward in ipairs(ChestConfig.Rewards) do
+	if reward.Type == "Skin" then
+		check(("SkinIcons has an entry for %s"):format(reward.SkinId), AssetConfig.SkinIcons[reward.SkinId] ~= nil)
+	end
 end
 
 -- ============================================================

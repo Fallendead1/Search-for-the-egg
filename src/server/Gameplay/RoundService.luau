@@ -160,6 +160,13 @@ function RoundService.BroadcastPlayerState(player: Player)
 end
 
 local function sendNotification(player: Player, message: string, kind: string?)
+	-- Guards the fake (plain-table, not a real Player Instance) callers
+	-- DebugTests exercises this through -- FireClient requires a real
+	-- Instance, so this would otherwise error instead of gracefully
+	-- degrading the way every other service touched by those tests does.
+	if typeof(player) ~= "Instance" then
+		return
+	end
 	RemotesLocator.Get("Gameplay_Notification"):FireClient(player, {
 		Text = message,
 		Kind = kind or "Info",

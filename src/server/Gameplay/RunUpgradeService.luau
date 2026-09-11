@@ -31,6 +31,22 @@ local ToolService = require(script.Parent.ToolService)
 
 local RunUpgradeService = {}
 
+-- Every reason any handler below (or ToolService.BuyUnlock/BuyUpgrade, which
+-- this delegates to) can return. A player who taps a purchase button and
+-- gets nothing back has no way to tell a rejected buy from a dropped remote
+-- -- always surface why.
+local FAILURE_MESSAGES: { [string]: string } = {
+	InsufficientCash = "Not enough Cash for that.",
+	MaxLevel = "Already at max level.",
+	AlreadyOwned = "Already unlocked.",
+	InvalidUpgrade = "That upgrade isn't available.",
+	InvalidTrack = "That upgrade isn't available.",
+	NoCashUnlockForTool = "That tool can't be unlocked with Cash.",
+	ToolNotOwned = "Unlock this tool first.",
+	RoundNotActive = "Start a run first.",
+	NoRunState = "Start a run first.",
+}
+
 -- ---- Hand (no ownership gate -- base tool) ----
 
 local function buyHandHold(_player: Player, state: any)
@@ -121,6 +137,14 @@ function RunUpgradeService.RequestBuy(player: Player, group: string, upgradeId: 
 		return false, "NoRunState"
 	end
 
+	local ok, err = RunUpgradeService.tryBuy(player, state, group, upgradeId)
+	if not ok and err then
+		RoundService.SendNotification(player, FAILURE_MESSAGES[err] or "Purchase failed.", "Error")
+	end
+	return ok, err
+end
+
+function RunUpgradeService.tryBuy(player: Player, state: any, group: string, upgradeId: string): (boolean, string?)
 	local simpleHandlers = SIMPLE_HANDLERS[group]
 	local simpleHandler = simpleHandlers and simpleHandlers[upgradeId]
 	if simpleHandler then

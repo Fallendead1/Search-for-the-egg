@@ -45,7 +45,7 @@ local function buildStatRows(body: Instance)
 	statRow(body, 2, "CLASS", profile.EquippedClass or "Starter")
 	statRow(body, 3, "TOTAL PLAYTIME", Format.time(profile.TotalPlaytime or 0))
 	statRow(body, 4, "TIME RECORD", profile.TimeRecord and Format.time(profile.TimeRecord) or "--:--")
-	statRow(body, 5, "TOTAL WINS", tostring(profile.TotalWins or 0))
+	statRow(body, 5, "TOTAL WINS", Format.integer(profile.TotalWins or 0))
 	statRow(body, 6, "FEATHERS COLLECTED", Format.compactNumber(profile.FeathersCollected or 0))
 end
 

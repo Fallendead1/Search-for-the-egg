@@ -59,6 +59,15 @@ remote(RemoteNames.Core_RequestClassRoll).OnServerEvent:Connect(function(player)
 	remote(RemoteNames.Core_ClassRollResult):FireClient(player, payload)
 end)
 
+local EQUIP_CLASS_FAILURE_MESSAGES: { [string]: string } = {
+	ProfileNotLoaded = "Still loading your profile -- try again in a moment.",
+	InvalidSlot = "That slot isn't available.",
+	InvalidClass = "Unknown class.",
+	NotOwned = "You don't own that class yet.",
+	Slot2Locked = "Second class slot is locked.",
+	DuplicateClass = "That class is already equipped in the other slot.",
+}
+
 remote(RemoteNames.Core_RequestEquipClass).OnServerEvent:Connect(function(player, slotIndex, classId)
 	if not RateLimitService.CheckAndStamp(player, "EquipClass") then
 		return
@@ -66,8 +75,21 @@ remote(RemoteNames.Core_RequestEquipClass).OnServerEvent:Connect(function(player
 	if type(slotIndex) ~= "number" or type(classId) ~= "string" then
 		return
 	end
-	ClassService.EquipClass(player, slotIndex, classId)
+	local ok, err = ClassService.EquipClass(player, slotIndex, classId)
+	if not ok then
+		remote(RemoteNames.Gameplay_Notification):FireClient(player, {
+			Text = EQUIP_CLASS_FAILURE_MESSAGES[err] or "Couldn't equip that class.",
+			Kind = "Error",
+		})
+	end
 end)
+
+local PERMANENT_PERK_FAILURE_MESSAGES: { [string]: string } = {
+	ProfileNotLoaded = "Still loading your profile -- try again in a moment.",
+	InvalidPerk = "That upgrade isn't available.",
+	MaxLevel = "Already at max level.",
+	InsufficientGems = "Not enough Gems for that.",
+}
 
 remote(RemoteNames.Core_RequestBuyPermanentPerk).OnServerEvent:Connect(function(player, perkId)
 	if not RateLimitService.CheckAndStamp(player, "BuyPermanentPerk") then
@@ -76,7 +98,13 @@ remote(RemoteNames.Core_RequestBuyPermanentPerk).OnServerEvent:Connect(function(
 	if type(perkId) ~= "string" then
 		return
 	end
-	MetaProgressionService.BuyPermanentPerk(player, perkId)
+	local ok, err = MetaProgressionService.BuyPermanentPerk(player, perkId)
+	if not ok then
+		remote(RemoteNames.Gameplay_Notification):FireClient(player, {
+			Text = PERMANENT_PERK_FAILURE_MESSAGES[err] or "Purchase failed.",
+			Kind = "Error",
+		})
+	end
 end)
 
 remote(RemoteNames.Core_RequestOpenAlienChest).OnServerEvent:Connect(function(player, count)
