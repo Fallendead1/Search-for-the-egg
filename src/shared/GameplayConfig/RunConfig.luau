@@ -128,6 +128,9 @@ RunConfig.TAGS = {
 	-- Lobby world hookups (see PartyPadService / client BagCounterController).
 	PartyPad = "SFTE_PartyPad",
 	BagUpgradeCounter = "SFTE_BagUpgradeCounter",
+	-- Physical Lobby NPC stands (see client LobbyPromptController).
+	ShopCounter = "SFTE_ShopCounter",
+	ClassCounter = "SFTE_ClassCounter",
 }
 
 return RunConfig

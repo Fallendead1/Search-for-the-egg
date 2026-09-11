@@ -77,6 +77,14 @@ local function onPadTouched(pad: Instance, hit: BasePart)
 	end
 end
 
+-- Read-only: the party currently assigned to `pad` (from touching it), or
+-- nil if the pad is free. Used by LobbyDisplayService to drive the physical
+-- queue sign from real party state instead of a separate presence system.
+function PartyPadService.GetPadParty(pad: Instance): any?
+	local partyId = padPartyId[pad]
+	return partyId and PartyService.GetParty(partyId)
+end
+
 function PartyPadService.Init()
 	PartyService.SetOnPartyDestroyed(freePad)
 

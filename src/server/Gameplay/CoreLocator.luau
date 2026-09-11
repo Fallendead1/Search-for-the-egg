@@ -73,6 +73,10 @@ function CoreLocator.GetMonetizationService()
 	return cached("MonetizationService")
 end
 
+function CoreLocator.GetLeaderboardService()
+	return cached("LeaderboardService")
+end
+
 function CoreLocator.GetWins(player: Player): number
 	return CoreLocator.GetMetaProgressionService().GetWins(player)
 end
