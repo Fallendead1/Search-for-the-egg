@@ -32,6 +32,14 @@ local function distance(a: Vector3, b: Vector3): number
 	return (a - b).Magnitude
 end
 
+-- A NaN/Infinity component would make every downstream `> rangeLimit`
+-- comparison silently false, bypassing the range check entirely. Never
+-- trust a client-supplied Vector3 without this.
+local function isFiniteVector3(v: Vector3): boolean
+	local x, y, z = v.X, v.Y, v.Z
+	return x == x and y == y and z == z and x ~= math.huge and x ~= -math.huge and y ~= math.huge and y ~= -math.huge and z ~= math.huge and z ~= -math.huge
+end
+
 local function getCharacterPosition(player: Player): Vector3?
 	local character = player.Character
 	if not character then
@@ -84,6 +92,9 @@ local function handleThrow(player: Player, payload: any)
 
 	local targetPosition = payload.TargetPosition
 	if typeof(targetPosition) ~= "Vector3" then
+		return
+	end
+	if not isFiniteVector3(targetPosition) then
 		return
 	end
 

@@ -68,6 +68,16 @@ local runQueue: { string } = {}
 -- The RunId currently occupying the shared local pile, if any.
 local physicallyActiveRunId: string? = nil
 
+-- Safety valve, NOT a GDD timer/mechanic: on the local (unconfigured
+-- Chapter1PlaceId) fallback, one run occupies the ONLY shared pile, so an
+-- abandoned run (every member still connected but AFK, or genuinely stuck)
+-- would otherwise block every other party in the Lobby from ever getting a
+-- turn. Nothing about the pace of a normal run comes anywhere close to
+-- this ceiling. Never used once Chapter1PlaceId is configured -- each
+-- reserved server only ever hosts the one party that teleported there, so
+-- there is no queue for a stuck run to block.
+local MAX_RUN_DURATION_SECONDS = 1800
+
 local onRunCreatedCallbacks: { (run: any) -> () } = {}
 local onRunEndedCallbacks: { (run: any) -> () } = {}
 
@@ -263,6 +273,21 @@ local function startRunNow(run: any)
 	end
 
 	startGoldenHarvestLoop(run)
+
+	-- Abandoned-run safety valve (see MAX_RUN_DURATION_SECONDS above) --
+	-- only actually matters on the local fallback path, but harmless
+	-- either way since it only fires if the run is somehow still Active.
+	task.delay(MAX_RUN_DURATION_SECONDS, function()
+		if run.State == "Active" then
+			for _, userId in ipairs(run.Members) do
+				local player = Players:GetPlayerByUserId(userId)
+				if player then
+					sendNotification(player, "This run took too long and was ended automatically.", "Error")
+				end
+			end
+			RoundService.EndRun(run)
+		end
+	end)
 end
 
 tryAdvanceQueue = function()
@@ -286,9 +311,19 @@ function RoundService.OnPartyStartRequested(party: any)
 	if TeleportConfig.IsChapter1TeleportConfigured() and game.PlaceId ~= TeleportConfig.Chapter1PlaceId then
 		local ChapterTeleportService = require(script.Parent.ChapterTeleportService)
 		if not ChapterTeleportService.TeleportParty(party) then
-			local owner = Players:GetPlayerByUserId(party.OwnerUserId)
-			if owner then
-				sendNotification(owner, "Could not start your run right now. Please try again.", "Error")
+			-- Production teleport failure: PartyService already flipped
+			-- Started = true before calling us (RequestStart), so without
+			-- this the party would be permanently stuck -- RequestStart
+			-- rejects with "PartyAlreadyStarted" forever and there is no
+			-- other way to clear that flag. Reset it and tell every member,
+			-- not just the owner, so everyone sees why nothing happened and
+			-- the owner can immediately retry.
+			PartyService.NotifyStartFailed(party.PartyId)
+			for _, userId in ipairs(party.Members) do
+				local member = Players:GetPlayerByUserId(userId)
+				if member then
+					sendNotification(member, "Could not start your run right now. Please try again.", "Error")
+				end
 			end
 		end
 		return

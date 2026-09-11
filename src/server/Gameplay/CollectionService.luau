@@ -26,6 +26,15 @@ local function distance(a: Vector3, b: Vector3): number
 	return (a - b).Magnitude
 end
 
+-- A NaN/Infinity component would make every downstream `> rangeLimit`
+-- comparison silently false (NaN/Inf comparisons never behave like a
+-- normal number), bypassing the range check entirely. Never trust a
+-- client-supplied Vector3 without this.
+local function isFiniteVector3(v: Vector3): boolean
+	local x, y, z = v.X, v.Y, v.Z
+	return x == x and y == y and z == z and x ~= math.huge and x ~= -math.huge and y ~= math.huge and y ~= -math.huge and z ~= math.huge and z ~= -math.huge
+end
+
 local function getCharacterPosition(player: Player): Vector3?
 	local character = player.Character
 	if not character then
@@ -155,6 +164,9 @@ function CollectionService.Init()
 		local tool = payload.Tool
 		local targetPosition = payload.TargetPosition
 		if type(tool) ~= "string" or typeof(targetPosition) ~= "Vector3" then
+			return
+		end
+		if not isFiniteVector3(targetPosition) then
 			return
 		end
 		CollectionService.RequestCollect(player, tool, targetPosition)

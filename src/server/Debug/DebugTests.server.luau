@@ -55,6 +55,8 @@ local SellService = require(Gameplay.SellService)
 local RoundService = require(Gameplay.RoundService)
 local EggService = require(Gameplay.EggService)
 local HardModeService = require(Gameplay.HardModeService)
+local PartyService = require(Gameplay.PartyService)
+local ChapterArrivalService = require(Gameplay.ChapterArrivalService)
 
 local ClassService = require(Core.ClassService)
 local LeaderboardService = require(Core.LeaderboardService)
@@ -609,6 +611,253 @@ check("Feathers board is a table", type(boards.Feathers) == "table")
 check("BestTime board is a table", type(boards.BestTime) == "table")
 
 -- ============================================================
+-- BATCH 3
+-- ============================================================
+
+-- ============================================================
+-- 26. Party membership rules (PartyService only ever indexes by
+--     Player.UserId -- Players:GetPlayerByUserId() safely returns nil for
+--     a fake/unregistered id, and every internal lookup already guards on
+--     that, so these fake-player tables exercise the REAL functions
+--     end-to-end without needing a live connection or loaded profile).
+--     Uses UserIds in the -900100..-900199 range, well clear of every
+--     other suite's fake ids, and leaves every party it creates fully
+--     torn down at the end so nothing lingers for a real tester.
+-- ============================================================
+suite("PartyMembership")
+local partyOwner = { UserId = -900100 }
+local partyMember2 = { UserId = -900101 }
+local partyMember3 = { UserId = -900102 }
+local partyMember4 = { UserId = -900103 }
+local partyMember5 = { UserId = -900104 }
+local outsidePlayer = { UserId = -900105 }
+
+local newParty = PartyService.CreateParty(partyOwner)
+check("CreateParty succeeds", newParty ~= nil)
+if newParty then
+	checkEqual("new party starts with 1 member", #newParty.Members, 1)
+	checkEqual("creator is the owner", newParty.OwnerUserId, partyOwner.UserId)
+	checkEqual("max size is 4", newParty.MaxSize, 4)
+
+	local dupOk, dupReason = PartyService.CreateParty(partyOwner)
+	check("cannot create a second party while already in one", dupOk == nil and dupReason == "AlreadyInParty")
+
+	check("2nd member can join", PartyService.JoinParty(partyMember2, newParty.PartyId) == true)
+	check("3rd member can join", PartyService.JoinParty(partyMember3, newParty.PartyId) == true)
+	check("4th member can join", PartyService.JoinParty(partyMember4, newParty.PartyId) == true)
+	checkEqual("party now has 4 members", #newParty.Members, 4)
+
+	local overflowOk, overflowReason = PartyService.JoinParty(partyMember5, newParty.PartyId)
+	check("5th member rejected (max 4)", overflowOk == false and overflowReason == "PartyFull")
+
+	local rejoinOk, rejoinReason = PartyService.JoinParty(partyMember2, newParty.PartyId)
+	check("a member already in the party can't join again", rejoinOk == false and rejoinReason == "AlreadyInParty")
+
+	local missingOk, missingReason = PartyService.JoinParty(outsidePlayer, "not-a-real-party-id")
+	check("joining a nonexistent party id fails", missingOk == false and missingReason == "PartyNotFound")
+
+	local nonLeaderOk, nonLeaderReason = PartyService.RequestStart(partyMember2)
+	check("non-leader cannot start the party", nonLeaderOk == false and nonLeaderReason == "NotOwner")
+
+	PartyService.LeaveParty(partyOwner)
+	local afterLeaderLeft = PartyService.GetParty(newParty.PartyId)
+	check("party survives the leader leaving (still has members)", afterLeaderLeft ~= nil)
+	if afterLeaderLeft then
+		checkEqual("ownership transfers to the next member", afterLeaderLeft.OwnerUserId, partyMember2.UserId)
+		checkEqual("party shrinks by one", #afterLeaderLeft.Members, 3)
+	end
+
+	local formerLeaderOk, formerLeaderReason = PartyService.LeaveParty(partyOwner)
+	check("a player no longer in any party can't leave again", formerLeaderOk == false and formerLeaderReason == "NotInParty")
+
+	-- Tear down completely so nothing lingers in PartyService's live
+	-- tables for a real tester to stumble on.
+	PartyService.LeaveParty(partyMember2)
+	PartyService.LeaveParty(partyMember3)
+	PartyService.LeaveParty(partyMember4)
+	check("party is destroyed once every member has left", PartyService.GetParty(newParty.PartyId) == nil)
+end
+
+-- ============================================================
+-- 27. Run queue ordering + party isolation (PartyService.CreateParty +
+--     RoundService.OnPartyStartRequested combined, exercising the REAL
+--     local-fallback queue end-to-end -- Chapter1PlaceId is 0/unconfigured
+--     in this environment, so this always takes the local-queue branch,
+--     never the production teleport branch, matching "Studio must
+--     gracefully fall back to the local run queue"). Cleans up fully.
+-- ============================================================
+suite("RunQueueOrdering")
+local queueOwnerA = { UserId = -900110 }
+local queueOwnerB = { UserId = -900111 }
+
+local partyA = PartyService.CreateParty(queueOwnerA)
+local partyB = PartyService.CreateParty(queueOwnerB)
+
+if partyA and partyB then
+	partyA.Started = true
+	RoundService.OnPartyStartRequested(partyA)
+	local runA = RoundService.GetRunForPlayer(queueOwnerA)
+	check("first party's run starts immediately", runA ~= nil and runA.State == "Active")
+	check("first party's run is active per RoundService.IsActive", runA and RoundService.IsActive(runA))
+
+	partyB.Started = true
+	RoundService.OnPartyStartRequested(partyB)
+	local runB = RoundService.GetRunForPlayer(queueOwnerB)
+	check("second party is queued behind the first, not started", runB ~= nil and runB.State == "Queued")
+	check("a Queued run never counts as active (no duplicate active runs)", runB and not RoundService.IsActive(runB))
+
+	if runA and runB then
+		check("each party gets its own distinct run instance", runA.RunId ~= runB.RunId)
+		check(
+			"party A's run lookup is never party B's run (no cross-party RunState)",
+			RoundService.GetRunForPlayer(queueOwnerA) ~= RoundService.GetRunForPlayer(queueOwnerB)
+		)
+
+		RoundService.EndRun(runA)
+		check("ending the active run immediately advances the queue", runB.State == "Active")
+		check("the newly-active run is now reported active", RoundService.IsActive(runB))
+
+		RoundService.EndRun(runB)
+		check(
+			"both runs are fully cleaned up (no lingering references)",
+			RoundService.GetRunForPlayer(queueOwnerA) == nil and RoundService.GetRunForPlayer(queueOwnerB) == nil
+		)
+		-- RoundService.EndRun releases the party via PartyService
+		-- .ReleasePartyAfterRun -- confirms nothing lingers in PartyService's
+		-- live tables either, not just RoundService's.
+		check(
+			"both synthetic parties were destroyed when their runs ended (no lingering PartyService state)",
+			PartyService.GetParty(partyA.PartyId) == nil and PartyService.GetParty(partyB.PartyId) == nil
+		)
+	end
+end
+
+-- ============================================================
+-- 28. Teleport payload validation (ChapterArrivalService.IsValidTeleportData
+--     is pure -- no Player/server state involved)
+-- ============================================================
+suite("TeleportPayloadValidation")
+check("nil payload rejected", not ChapterArrivalService.IsValidTeleportData(nil))
+check("non-table payload rejected", not ChapterArrivalService.IsValidTeleportData("not a table"))
+check("empty table rejected", not ChapterArrivalService.IsValidTeleportData({}))
+check(
+	"missing PartyId rejected",
+	not ChapterArrivalService.IsValidTeleportData({ ChapterId = "Chapter1", Difficulty = "Normal", Members = { 1 } })
+)
+check(
+	"unknown ChapterId rejected",
+	not ChapterArrivalService.IsValidTeleportData({ PartyId = "p1", ChapterId = "NotAChapter", Difficulty = "Normal", Members = { 1 } })
+)
+check(
+	"disabled Chapter2 rejected (matches HardModeGating -- Chapter2 is not Enabled)",
+	not ChapterArrivalService.IsValidTeleportData({ PartyId = "p1", ChapterId = "Chapter2", Difficulty = "Normal", Members = { 1 } })
+)
+check(
+	"unknown Difficulty rejected",
+	not ChapterArrivalService.IsValidTeleportData({ PartyId = "p1", ChapterId = "Chapter1", Difficulty = "Impossible", Members = { 1 } })
+)
+check(
+	"empty Members list rejected",
+	not ChapterArrivalService.IsValidTeleportData({ PartyId = "p1", ChapterId = "Chapter1", Difficulty = "Normal", Members = {} })
+)
+check(
+	"Members list over PARTY_MAX_SIZE rejected",
+	not ChapterArrivalService.IsValidTeleportData({
+		PartyId = "p1",
+		ChapterId = "Chapter1",
+		Difficulty = "Normal",
+		Members = { 1, 2, 3, 4, 5 },
+	})
+)
+check(
+	"non-numeric member id rejected",
+	not ChapterArrivalService.IsValidTeleportData({
+		PartyId = "p1",
+		ChapterId = "Chapter1",
+		Difficulty = "Normal",
+		Members = { 1, "not-a-userid" },
+	})
+)
+check(
+	"well-formed teleport data accepted",
+	ChapterArrivalService.IsValidTeleportData({ PartyId = "p1", ChapterId = "Chapter1", Difficulty = "Hard", Members = { 1, 2, 3, 4 } })
+)
+
+-- ============================================================
+-- 29. Chapter1PlaceId configuration behavior. Sets and immediately resets
+--     TeleportConfig.Chapter1PlaceId with no yield in between -- Luau's
+--     cooperative scheduling means no other script can observe the
+--     mutated value in that window, so this can't race a real bootstrap.
+-- ============================================================
+suite("TeleportConfiguration")
+local TeleportConfig = require(GameplayConfig.TeleportConfig)
+checkEqual("Chapter1PlaceId starts as the unconfigured placeholder", TeleportConfig.Chapter1PlaceId, 0)
+check("unconfigured (0) reports not configured", not TeleportConfig.IsChapter1TeleportConfigured())
+TeleportConfig.Chapter1PlaceId = 123456789
+check("a nonzero id reports configured", TeleportConfig.IsChapter1TeleportConfigured())
+TeleportConfig.Chapter1PlaceId = 0
+check("restored to the unconfigured placeholder for every other suite/bootstrap", not TeleportConfig.IsChapter1TeleportConfigured())
+
+-- ============================================================
+-- 30. Exploit/invalid-input rejection (pure logic, no live player needed)
+-- ============================================================
+suite("ExploitRejection")
+local RunUpgradeService = require(Gameplay.RunUpgradeService)
+
+-- RunUpgradeService.RequestBuy/ToolService.BuyUpgrade/SellService.RequestSell
+-- all short-circuit on RoundService.GetRunForPlayer, so a fake
+-- (unregistered) player exercises the same "not in an active run"
+-- rejection every spammed/forged remote call from outside a run would hit.
+local rejectPlayer = { UserId = -900120 }
+local buyOk, buyReason = RunUpgradeService.RequestBuy(rejectPlayer, "Hand", "Speed")
+check("purchase attempt with no active run is rejected, not silently accepted", buyOk == false and buyReason == "RoundNotActive")
+
+local toolBuyOk, toolBuyReason = ToolService.BuyUpgrade(rejectPlayer, "Pitchfork", "Amount")
+check("tool upgrade attempt with no active run is rejected", toolBuyOk == false and toolBuyReason == "RoundNotActive")
+
+local sellOk, sellReason = SellService.RequestSell(rejectPlayer)
+check("sell attempt with no active run is rejected", sellOk == false and sellReason == "RoundNotActive")
+
+-- Invalid Group/UpgradeId enum rejection, exercised against a REAL active
+-- run this time (own party, own UserId range, fully torn down after).
+local exploitOwner = { UserId = -900121 }
+local exploitParty = PartyService.CreateParty(exploitOwner)
+if exploitParty then
+	exploitParty.Started = true
+	RoundService.OnPartyStartRequested(exploitParty)
+	local exploitRun = RoundService.GetRunForPlayer(exploitOwner)
+	check("exploit-test run started", exploitRun ~= nil and RoundService.IsActive(exploitRun))
+
+	-- startRunNow only calls RunPlayerStateService.InitPlayer for members
+	-- Players:GetPlayerByUserId can actually resolve, which a fake/
+	-- unregistered UserId never is -- give this fake player the state a
+	-- real one would have gotten automatically, so the checks below reach
+	-- past "NoRunState" into the Group/UpgradeId/ownership validation
+	-- they're actually meant to exercise.
+	RunPlayerStateService.InitPlayer(exploitOwner, "Normal")
+
+	local invalidGroupOk, invalidGroupReason = RunUpgradeService.RequestBuy(exploitOwner, "NotARealGroup", "Speed")
+	check("unknown upgrade Group rejected even with an active run", invalidGroupOk == false and invalidGroupReason == "InvalidUpgrade")
+
+	local invalidIdOk, invalidIdReason = RunUpgradeService.RequestBuy(exploitOwner, "Hand", "NotARealUpgradeId")
+	check("unknown UpgradeId rejected even with an active run", invalidIdOk == false and invalidIdReason == "InvalidUpgrade")
+
+	local invalidToolTrackOk, invalidToolTrackReason = ToolService.BuyUpgrade(exploitOwner, "Pitchfork", "NotARealTrack")
+	check("unknown tool upgrade track rejected", invalidToolTrackOk == false and invalidToolTrackReason == "InvalidTrack")
+
+	local unownedToolUpgradeOk, unownedToolUpgradeReason = ToolService.BuyUpgrade(exploitOwner, "Pitchfork", "Amount")
+	check(
+		"tool upgrade rejected before Pitchfork is unlocked (no ownership bypass)",
+		unownedToolUpgradeOk == false and unownedToolUpgradeReason == "ToolNotOwned"
+	)
+
+	if exploitRun then
+		RoundService.EndRun(exploitRun)
+	end
+	check("exploit-test party cleaned up", PartyService.GetParty(exploitParty.PartyId) == nil)
+end
+
+-- ============================================================
 -- Summary
 -- ============================================================
 print(("[DebugTests] %d passed, %d failed (%d total)"):format(passed, failed, passed + failed))
@@ -620,13 +869,15 @@ end
 
 print(table.concat({
 	"[DebugTests] NOT covered here (needs a live Studio interaction test instead):",
-	"  - Hand/Pitchfork/Dynamite/Vacuum/Drone purchase remotes end-to-end (character position/range checks, real RoundService run registry)",
+	"  - Hand/Pitchfork/Dynamite/Vacuum/Drone purchase remotes end-to-end (character position/range checks)",
 	"  - Pitchfork/Dynamite/Vacuum/Drone collection, cooldowns, and pile visual removal",
 	"  - Drone AI cycle (pile -> sell station -> pile) and swarm spawn/cleanup",
 	"  - CurrencyService.Award's Earned-vs-Purchased Gems2x source policy (needs a loaded DataStore profile)",
 	"  - Class roll RNG distribution (odds/weights themselves ARE tested above), class equip flow (ownership/",
 	"    slot-unlock/duplicate-class checks all gate on a loaded profile), permanent perk purchase",
-	"  - Party create/join/start, queueing, and Farmer/Egg pickup range checks",
+	"  - Party create/join/start/leave/leader-transfer/max-size/queueing ARE exercised above end-to-end with",
+	"    fake players (PartyMembership/RunQueueOrdering suites) -- what's NOT covered is the party PAD touch",
+	"    flow, real Farmer/Egg pickup range checks, and anything through an actual connected client/remote",
 	"  - Marketplace prompts (no real product/pass IDs exist yet -- see MonetizationConfig)",
 	"  - Code redemption end-to-end (one-time-use check reads a loaded profile's CodesRedeemed)",
 	"  - StatsService.ReportRunTime's Best-Time-only-if-better comparison, and every stat increment",
@@ -639,4 +890,12 @@ print(table.concat({
 	"  - LeaderboardService's actual OrderedDataStore read/write path (Studio needs \"Enable Studio Access",
 	"    to API Services\" for this; GetBoards()'s shape and its local-fallback ranking logic don't need it",
 	"    and ARE exercised indirectly by every fake-player test above using the same no-profile pattern)",
+	"  - The PRODUCTION teleport path itself (ReserveServer/TeleportAsync/TeleportOptions, and",
+	"    ChapterArrivalService's Players.PlayerAdded/GetJoinData listener) cannot be executed at all without a",
+	"    real second Place and Chapter1PlaceId -- only its pure validation logic (TeleportPayloadValidation) and",
+	"    its config toggle (TeleportConfiguration) are tested; this is genuinely untestable until that Place exists",
+	"  - True concurrent/simultaneous multiplayer timing (two real clients racing the same remote at the same",
+	"    network tick) -- the single-threaded-server reasoning that makes this safe is documented in each",
+	"    service's comments and was verified by code inspection, not by an actual two-client race",
+	"  - Mobile touch input feel and on-screen layout/bounds on a real small viewport",
 }, "\n"))

@@ -267,6 +267,21 @@ function PartyService.RequestStart(player: Player)
 	return true
 end
 
+-- Called by RoundService if a start ultimately fails after Started was
+-- already set to true (e.g. a production ReserveServer/TeleportAsync
+-- failure) -- resets Started and re-broadcasts so the party isn't
+-- permanently stuck unable to ever start again (RequestStart above
+-- rejects with "PartyAlreadyStarted" while this stays true).
+function PartyService.NotifyStartFailed(partyId: string)
+	local party = parties[partyId]
+	if not party then
+		return
+	end
+	party.Started = false
+	recomputeCanStart(party)
+	broadcastParty(party)
+end
+
 function PartyService.LeaveParty(player: Player)
 	local party = PartyService.GetPlayerParty(player)
 	if not party then
