@@ -2,15 +2,21 @@
   "name": "SearchForTheEgg",
   "tree": {
     "$className": "DataModel",
-    "ServerScriptService": {
-      "$path": "src/ServerScriptService"
-    },
     "ReplicatedStorage": {
-      "$path": "src/ReplicatedStorage"
+      "SearchForTheEgg": {
+        "$path": "src/shared"
+      }
+    },
+    "ServerScriptService": {
+      "SearchForTheEgg": {
+        "$path": "src/server"
+      }
     },
     "StarterPlayer": {
       "StarterPlayerScripts": {
-        "$path": "src/StarterPlayerScripts"
+        "SearchForTheEgg": {
+          "$path": "src/client"
+        }
       }
     }
   }

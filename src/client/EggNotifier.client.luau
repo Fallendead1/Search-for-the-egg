@@ -1,7 +1,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
 
-local eggFoundRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("EggFound")
+local eggFoundRemote = ReplicatedStorage:WaitForChild("SearchForTheEgg"):WaitForChild("Remotes"):WaitForChild("EggFound")
 
 eggFoundRemote.OnClientEvent:Connect(function()
 	StarterGui:SetCore("SendNotification", {

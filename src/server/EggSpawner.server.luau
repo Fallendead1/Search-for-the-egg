@@ -2,7 +2,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
-local eggFoundRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("EggFound")
+local eggFoundRemote = ReplicatedStorage:WaitForChild("SearchForTheEgg"):WaitForChild("Remotes"):WaitForChild("EggFound")
 
 -- Roughly matches the default Studio baseplate footprint. Adjust once the
 -- real map is built.
