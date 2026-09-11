@@ -8,6 +8,7 @@ local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 
 local DisplayConfig = require(script.Parent.Parent.Data.DisplayConfig)
+local PlayerState = require(script.Parent.Parent.State.PlayerState)
 
 local MonetizationController = {}
 
@@ -37,6 +38,16 @@ end
 
 function MonetizationController.hasGamePass(key: string): boolean
 	return DisplayConfig.getPassId(key) ~= nil
+end
+
+-- Ownership of a one-time Developer Product grant (Kind = "Entitlement" in
+-- MonetizationConfig, e.g. PitchforkPermanent/FastRolls/ClassLuck2x/
+-- ExtraClassSlot). Unlike a Game Pass, Roblox has no client-queryable
+-- ownership API for these -- the only source of truth is the server's own
+-- profile, mirrored into PlayerState.Profile.EntitlementSummary via
+-- Core_ProfileUpdated.
+function MonetizationController.ownsEntitlement(key: string): boolean
+	return PlayerState.Profile.EntitlementSummary[key] == true
 end
 
 function MonetizationController.ownsGamePass(key: string): boolean

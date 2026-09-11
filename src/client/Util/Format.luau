@@ -1,8 +1,10 @@
 --!strict
 local Format = {}
 
-function Format.cash(amount: number): string
-	return ("$%.2f"):format(amount)
+-- amountCents is integer cents (the canonical server Cash representation --
+-- see RunPlayerStateService/DisplayConfig). 25 -> "$0.25".
+function Format.cash(amountCents: number): string
+	return ("$%.2f"):format(amountCents / 100)
 end
 
 function Format.time(seconds: number): string

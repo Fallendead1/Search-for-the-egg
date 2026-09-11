@@ -56,10 +56,7 @@ local function getTouchTargetPosition(inputPosition: Vector3): Vector3?
 end
 
 local function isToolOwned(tool: string): boolean
-	if tool == "Hand" then
-		return true
-	end
-	return PlayerState.Profile.OwnedTools[tool] == true
+	return PlayerState.isToolOwned(tool)
 end
 
 local function requestCollect(targetPosition: Vector3?)
@@ -159,7 +156,7 @@ function InputController.init()
 		if not holding then
 			return
 		end
-		if not PlayerState.Profile.HoldUnlocked then
+		if not PlayerState.Run.HandHoldUnlocked then
 			return
 		end
 		if activeTouchPosition then

@@ -26,6 +26,7 @@ local playerPartyId: { [number]: string } = {}
 
 local onPartyChanged: (party: any) -> () = function() end
 local onPartyStartRequested: (party: any) -> () = function() end
+local onPartyDestroyed: (party: any) -> () = function() end
 
 function PartyService.SetOnPartyChanged(callback)
 	onPartyChanged = callback
@@ -33,6 +34,15 @@ end
 
 function PartyService.SetOnPartyStartRequested(callback)
 	onPartyStartRequested = callback
+end
+
+-- Fired whenever a party stops existing (last member left/disconnected).
+-- PartyPadService uses this to free the pad that party was assigned to.
+-- NOT fired for a party that simply started a run -- that party object
+-- keeps existing (Started = true) until RoundService releases it via
+-- ReleasePartyAfterRun, which destroys it and fires this same callback.
+function PartyService.SetOnPartyDestroyed(callback)
+	onPartyDestroyed = callback
 end
 
 local function difficultyUnlocked(player: Player, difficultyId: string): boolean
@@ -45,6 +55,7 @@ end
 
 local function serializeParty(party: any)
 	return {
+		InParty = true,
 		PartyId = party.PartyId,
 		OwnerUserId = party.OwnerUserId,
 		Members = table.clone(party.Members),
@@ -104,6 +115,27 @@ end
 
 local function destroyParty(party: any)
 	parties[party.PartyId] = nil
+	onPartyDestroyed(party)
+end
+
+-- Members-only broadcastParty (see above) never reaches a player who just
+-- left -- they've already been stripped from party.Members by the time it
+-- fires. Tell them explicitly so their client resets out of the party UI
+-- (a no-op if they're actually disconnecting rather than voluntarily
+-- leaving).
+local function notifyLeft(player: Player)
+	local remote = RemotesLocator.Get("Gameplay_PartyState")
+	remote:FireClient(player, {
+		InParty = false,
+		PartyId = nil,
+		OwnerUserId = nil,
+		Members = {},
+		MaxSize = 0,
+		ChapterId = nil,
+		Difficulty = nil,
+		CanStart = false,
+		Started = false,
+	})
 end
 
 local function leaveCurrentParty(player: Player)
@@ -113,6 +145,7 @@ local function leaveCurrentParty(player: Player)
 	end
 
 	removeMember(party, player.UserId)
+	notifyLeft(player)
 
 	if #party.Members == 0 then
 		destroyParty(party)
@@ -243,10 +276,17 @@ function PartyService.LeaveParty(player: Player)
 	return true
 end
 
--- Called by RoundService once a run ends, so members can form/join a new party.
+-- Called by RoundService once a run ends (or a queued run is dropped), so
+-- members can form/join a new party. Explicitly resets every member's
+-- client-side party UI -- see notifyLeft's header for why broadcastParty
+-- alone can't do this.
 function PartyService.ReleasePartyAfterRun(party: any)
 	for _, userId in ipairs(table.clone(party.Members)) do
 		playerPartyId[userId] = nil
+		local player = Players:GetPlayerByUserId(userId)
+		if player then
+			notifyLeft(player)
+		end
 	end
 	destroyParty(party)
 end

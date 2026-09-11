@@ -183,7 +183,8 @@ function ChestController.open()
 		end
 		opening = true
 		Theme.setButtonEnabled(openButton, false)
-		Remotes.fireServer("Core_RequestOpenAlienChest", { Count = 1, Method = "Tokens" })
+		-- CoreBootstrap's handler reads this as a raw count, not a table.
+		Remotes.fireServer("Core_RequestOpenAlienChest", 1)
 	end)
 
 	for i, multi in ipairs(DisplayConfig.AlienChest.MultiOpen) do

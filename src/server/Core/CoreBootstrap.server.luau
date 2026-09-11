@@ -46,11 +46,16 @@ remote(RemoteNames.Core_RequestClassRoll).OnServerEvent:Connect(function(player)
 	end
 
 	local ok, resultOrReason = ClassService.RollClass(player)
-	remote(RemoteNames.Core_ClassRollResult):FireClient(player, {
-		Success = ok,
-		Reason = (not ok) and resultOrReason or nil,
-		Result = ok and resultOrReason or nil,
-	})
+	local payload: any = { Success = ok }
+	if ok then
+		payload.ClassId = resultOrReason.ClassId
+		payload.IsNew = resultOrReason.IsNew
+		payload.DisplayName = resultOrReason.DisplayName
+	else
+		payload.Reason = resultOrReason
+		payload.Message = resultOrReason
+	end
+	remote(RemoteNames.Core_ClassRollResult):FireClient(player, payload)
 end)
 
 remote(RemoteNames.Core_RequestEquipClass).OnServerEvent:Connect(function(player, slotIndex, classId)

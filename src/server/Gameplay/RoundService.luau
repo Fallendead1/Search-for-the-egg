@@ -1,27 +1,55 @@
 --[[
-	Owns the round state machine and the single active run.
+	Owns the round state machine and every run currently in flight.
 
-	SCOPE DECISION: the design doc doesn't specify whether concurrent parties
-	each get a fully separate physical instance of Chapter 1, or whether the
-	map is one shared physical space. Since only one Studio map currently
-	exists and instancing/teleporting parties into separate copies is a large
-	additional system nobody asked for yet, this service supports exactly one
-	Active run at a time server-wide; a party that tries to start while
-	another run is in progress is rejected with "RoundInProgress". Internals
-	are still organized around a `run` object (not bare globals) so upgrading
-	to multiple concurrent runs later is a matter of keying by RunId instead
-	of a single ActiveRun slot -- flagged for Agent 1/2 awareness.
+	PRODUCTION ARCHITECTURE (see TeleportConfig.luau): when
+	TeleportConfig.IsChapter1TeleportConfigured() is true, a party that
+	starts is handed off to ChapterTeleportService, which reserves a private
+	server on Chapter 1's own Place and teleports only that party there --
+	every party gets a fully isolated pile/Egg/Farmer instance, and this
+	(Lobby) server is never blocked no matter how many parties are mid-run
+	elsewhere.
 
-	State machine: Lobby -> PartyForming -> Loading -> Active -> Completing
-	-> Returning -> Ended. Only PartyService/EggService/FarmerService drive
-	transitions; every gameplay action validates against RoundService.State.
+	LOCAL FALLBACK (default, since Chapter1PlaceId starts unconfigured):
+	there is currently only one physical map (one MapAnchors pile/sell
+	station/Farmer), so this server can only ever host ONE party's run at a
+	time. Rather than reject a second party's start request outright (which
+	would block the whole Lobby from ever progressing, an explicitly
+	rejected design), every started party is admitted immediately into a
+	RunId-keyed FIFO queue: `runsById`/`playerRunId` track every run object
+	that exists right now (queued or actually running), and `runQueue`
+	orders the ones still waiting for the shared pile. The moment the
+	physically active run ends, the next queued run is built and started
+	automatically. Parties are never blocked from forming/selecting/starting
+	in the Lobby; they just wait their turn for the one shared map. Once
+	Chapter1PlaceId is configured, this local queue is never exercised --
+	every party gets its own server instead.
+
+	State machine: Queued -> Active -> Completing -> Returning -> Ended. Only
+	PartyService/EggService/FarmerService drive transitions; every gameplay
+	action validates against RoundService.IsActive(run).
+
+	Gameplay_RunState canonical contract (all three sub-messages share one
+	remote; fields merge flatly into the client's PlayerState.Run so field
+	names must never collide across message types):
+		{ Type = "RoundMeta", RunId, InProgress, RoundState, ChapterId,
+		  Difficulty, StartedAt, QueuePosition, EggState, EggCarrierUserId,
+		  EggPosition, GoldenHarvestActive, GoldenHarvestEndsAt }
+		{ Type = "PlayerState", UserId, CashCents, BagCount, BagCapacity,
+		  BagLevel, RainbowInBag, HandHoldUnlocked, HandSpeed, HandGrasp,
+		  HandSpeedLevel, HandGraspLevel, CarryingEgg, Tools }
+		{ Type = "VacuumHeat", VacuumHeat, Active, Overheated, RuntimeElapsed }
+	StartedAt is stamped from workspace:GetServerTimeNow() (NOT os.time())
+	so it shares a clock domain with the client's own GetServerTimeNow() timer
+	sync in RunHUDController.
 ]]
 
 local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 
 local RunConfig = require(ReplicatedStorage.SearchForTheEgg.GameplayConfig.RunConfig)
+local TeleportConfig = require(ReplicatedStorage.SearchForTheEgg.GameplayConfig.TeleportConfig)
 
 local RemotesLocator = require(script.Parent.RemotesLocator)
 local CoreLocator = require(script.Parent.CoreLocator)
@@ -31,7 +59,14 @@ local FeatherPileService = require(script.Parent.FeatherPileService)
 
 local RoundService = {}
 
-local activeRun: any = nil
+-- Every run that currently exists (queued or active), keyed by RunId.
+local runsById: { [string]: any } = {}
+-- userId -> RunId, for O(1) GetRunForPlayer/GetRunForUserId lookups.
+local playerRunId: { [number]: string } = {}
+-- RunIds waiting for the one shared local pile, in start order.
+local runQueue: { string } = {}
+-- The RunId currently occupying the shared local pile, if any.
+local physicallyActiveRunId: string? = nil
 
 local onRunCreatedCallbacks: { (run: any) -> () } = {}
 local onRunEndedCallbacks: { (run: any) -> () } = {}
@@ -44,33 +79,31 @@ function RoundService.OnRunEnded(callback)
 	table.insert(onRunEndedCallbacks, callback)
 end
 
-function RoundService.GetActiveRun()
-	return activeRun
+function RoundService.IsActive(run: any): boolean
+	return run ~= nil and run.State == "Active"
 end
 
-function RoundService.IsActive(run: any): boolean
-	return run ~= nil and run == activeRun and run.State == "Active"
+function RoundService.GetRunForUserId(userId: number)
+	local runId = playerRunId[userId]
+	return runId and runsById[runId]
 end
 
 function RoundService.GetRunForPlayer(player: Player)
-	if not activeRun then
-		return nil
-	end
-	if table.find(activeRun.Members, player.UserId) then
-		return activeRun
-	end
-	return nil
+	return RoundService.GetRunForUserId(player.UserId)
 end
 
 local function broadcastMeta(run: any)
 	local remote = RemotesLocator.Get("Gameplay_RunState")
+	local queueIndex = table.find(runQueue, run.RunId)
 	local payload = {
 		Type = "RoundMeta",
 		RunId = run.RunId,
+		InProgress = run.State == "Active",
 		RoundState = run.State,
 		ChapterId = run.ChapterId,
 		Difficulty = run.Difficulty,
-		StartTime = run.StartTime,
+		StartedAt = run.StartedAt,
+		QueuePosition = queueIndex,
 		EggState = run.EggState,
 		EggCarrierUserId = run.EggCarrierUserId,
 		EggPosition = run.EggPosition,
@@ -89,6 +122,17 @@ function RoundService.BroadcastRunMeta(run: any)
 	broadcastMeta(run)
 end
 
+-- Recomputes and (re)broadcasts QueuePosition for every run still waiting,
+-- so queued parties see their position tick down rather than looking stuck.
+local function broadcastQueuePositions()
+	for _, runId in ipairs(runQueue) do
+		local run = runsById[runId]
+		if run then
+			broadcastMeta(run)
+		end
+	end
+end
+
 function RoundService.BroadcastPlayerState(player: Player)
 	local run = RoundService.GetRunForPlayer(player)
 	if not run then
@@ -99,16 +143,15 @@ function RoundService.BroadcastPlayerState(player: Player)
 		return
 	end
 	local remote = RemotesLocator.Get("Gameplay_RunState")
-	remote:FireClient(player, {
-		Type = "PlayerState",
-		UserId = player.UserId,
-		Data = RunPlayerStateService.SerializeForClient(state),
-	})
+	local payload = RunPlayerStateService.SerializeForClient(state)
+	payload.Type = "PlayerState"
+	payload.UserId = player.UserId
+	remote:FireClient(player, payload)
 end
 
 local function sendNotification(player: Player, message: string, kind: string?)
 	RemotesLocator.Get("Gameplay_Notification"):FireClient(player, {
-		Message = message,
+		Text = message,
 		Kind = kind or "Info",
 	})
 end
@@ -176,8 +219,8 @@ local function createRunFromParty(party: any)
 		ChapterId = party.ChapterId,
 		Difficulty = party.Difficulty,
 		Members = table.clone(party.Members),
-		State = "Loading",
-		StartTime = 0,
+		State = "Queued",
+		StartedAt = nil,
 		EggState = "Buried",
 		EggCarrierUserId = nil,
 		GoldenHarvestActive = false,
@@ -187,17 +230,12 @@ local function createRunFromParty(party: any)
 	return run
 end
 
-function RoundService.OnPartyStartRequested(party: any)
-	if activeRun ~= nil then
-		local owner = Players:GetPlayerByUserId(party.OwnerUserId)
-		if owner then
-			sendNotification(owner, "A round is already in progress. Try again shortly.", "Error")
-		end
-		return
-	end
+local tryAdvanceQueue
 
-	local run = createRunFromParty(party)
-	activeRun = run
+-- Actually builds the pile and flips a queued run to Active. Only ever
+-- called for the one run allowed to occupy the shared local pile.
+local function startRunNow(run: any)
+	physicallyActiveRunId = run.RunId
 
 	for _, userId in ipairs(run.Members) do
 		local player = Players:GetPlayerByUserId(userId)
@@ -207,9 +245,10 @@ function RoundService.OnPartyStartRequested(party: any)
 	end
 
 	FeatherPileService.BuildForRun(run, run.Difficulty)
+	FeatherPileService.BroadcastSnapshot(run.Pile)
 
 	run.State = "Active"
-	run.StartTime = os.time()
+	run.StartedAt = Workspace:GetServerTimeNow()
 
 	broadcastMeta(run)
 	for _, userId in ipairs(run.Members) do
@@ -224,6 +263,56 @@ function RoundService.OnPartyStartRequested(party: any)
 	end
 
 	startGoldenHarvestLoop(run)
+end
+
+tryAdvanceQueue = function()
+	if physicallyActiveRunId ~= nil then
+		return
+	end
+	local nextRunId = table.remove(runQueue, 1)
+	if not nextRunId then
+		return
+	end
+	local run = runsById[nextRunId]
+	if not run or run.State ~= "Queued" then
+		tryAdvanceQueue()
+		return
+	end
+	startRunNow(run)
+	broadcastQueuePositions()
+end
+
+function RoundService.OnPartyStartRequested(party: any)
+	if TeleportConfig.IsChapter1TeleportConfigured() and game.PlaceId ~= TeleportConfig.Chapter1PlaceId then
+		local ChapterTeleportService = require(script.Parent.ChapterTeleportService)
+		if not ChapterTeleportService.TeleportParty(party) then
+			local owner = Players:GetPlayerByUserId(party.OwnerUserId)
+			if owner then
+				sendNotification(owner, "Could not start your run right now. Please try again.", "Error")
+			end
+		end
+		return
+	end
+
+	local run = createRunFromParty(party)
+	runsById[run.RunId] = run
+	for _, userId in ipairs(run.Members) do
+		playerRunId[userId] = run.RunId
+	end
+
+	table.insert(runQueue, run.RunId)
+	broadcastMeta(run)
+
+	if #runQueue > 1 then
+		for _, userId in ipairs(run.Members) do
+			local player = Players:GetPlayerByUserId(userId)
+			if player then
+				sendNotification(player, "Chapter 1 is busy -- your party will start automatically.", "Info")
+			end
+		end
+	end
+
+	tryAdvanceQueue()
 end
 
 -- Atomically transitions Active -> Completing. Returns false if another
@@ -245,8 +334,7 @@ end
 -- schedules cleanup. Must only be called after TryBeginCompletion succeeded.
 function RoundService.FinalizeCompletion(run: any, winningUserId: number)
 	local metaProgression = CoreLocator.GetMetaProgressionService()
-	local difficulty = RunConfig.DIFFICULTY[run.Difficulty]
-	local elapsedSeconds = os.time() - run.StartTime
+	local elapsedSeconds = Workspace:GetServerTimeNow() - (run.StartedAt or Workspace:GetServerTimeNow())
 
 	local summaries = {}
 	for _, userId in ipairs(run.Members) do
@@ -265,7 +353,7 @@ function RoundService.FinalizeCompletion(run: any, winningUserId: number)
 				summaries[userId] = result
 			else
 				warn(("[Gameplay] AwardRunCompletion failed for %d: %s"):format(userId, tostring(result)))
-				summaries[userId] = { Gems = 0, AlienTokens = 0, Wins = 0 }
+				summaries[userId] = { GemsAwarded = 0, AlienTokensAwarded = 0, Wins = 0 }
 			end
 		end
 	end
@@ -274,14 +362,18 @@ function RoundService.FinalizeCompletion(run: any, winningUserId: number)
 	for _, userId in ipairs(run.Members) do
 		local player = Players:GetPlayerByUserId(userId)
 		if player then
+			local summary = summaries[userId] or {}
 			completionRemote:FireClient(player, {
 				RunId = run.RunId,
 				ChapterId = run.ChapterId,
 				Difficulty = run.Difficulty,
-				ElapsedSeconds = elapsedSeconds,
+				Time = elapsedSeconds,
 				WinningUserId = winningUserId,
-				Reward = summaries[userId],
-				ExpectedReward = difficulty and difficulty.CompletionReward or nil,
+				Gems = summary.GemsAwarded or 0,
+				AlienTokens = summary.AlienTokensAwarded or 0,
+				Wins = summary.Wins or 0,
+				NewRecord = summary.IsNewRecord or false,
+				BestTime = summary.BestTime,
 			})
 		end
 	end
@@ -308,12 +400,17 @@ function RoundService.EndRun(run: any)
 		end
 	end
 
-	FeatherPileService.Destroy(run.Pile)
+	if run.Pile then
+		FeatherPileService.Destroy(run.Pile)
+	end
 
 	for _, userId in ipairs(run.Members) do
 		local player = Players:GetPlayerByUserId(userId)
 		if player then
 			RunPlayerStateService.Remove(player)
+		end
+		if playerRunId[userId] == run.RunId then
+			playerRunId[userId] = nil
 		end
 	end
 
@@ -322,29 +419,60 @@ function RoundService.EndRun(run: any)
 		PartyService.ReleasePartyAfterRun(party)
 	end
 
-	if activeRun == run then
-		activeRun = nil
+	runsById[run.RunId] = nil
+	if physicallyActiveRunId == run.RunId then
+		physicallyActiveRunId = nil
+		tryAdvanceQueue()
 	end
 end
 
--- Handles a member disconnecting or leaving mid-run: if it was the last
--- present member, end the run early instead of leaking it forever.
+-- Drops a run that was still Queued (never occupied the pile, nothing to
+-- tear down) when it loses every member before its turn comes up.
+local function dropQueuedRun(run: any)
+	runsById[run.RunId] = nil
+	local index = table.find(runQueue, run.RunId)
+	if index then
+		table.remove(runQueue, index)
+	end
+	for _, userId in ipairs(run.Members) do
+		if playerRunId[userId] == run.RunId then
+			playerRunId[userId] = nil
+		end
+	end
+	local party = PartyService.GetParty(run.PartyId)
+	if party then
+		PartyService.ReleasePartyAfterRun(party)
+	end
+end
+
+-- Handles a member disconnecting or leaving mid-run/queue: if it was the
+-- last present member, end (or drop) the run early instead of leaking it.
 local function handlePlayerRemoving(player: Player)
-	if not activeRun then
+	local runId = playerRunId[player.UserId]
+	if not runId then
 		return
 	end
-	if not table.find(activeRun.Members, player.UserId) then
+	local run = runsById[runId]
+	if not run then
+		playerRunId[player.UserId] = nil
 		return
 	end
+
 	local anyoneLeft = false
-	for _, userId in ipairs(activeRun.Members) do
+	for _, userId in ipairs(run.Members) do
 		if userId ~= player.UserId and Players:GetPlayerByUserId(userId) then
 			anyoneLeft = true
 			break
 		end
 	end
-	if not anyoneLeft and activeRun.State ~= "Ended" then
-		RoundService.EndRun(activeRun)
+	if anyoneLeft then
+		return
+	end
+
+	if run.State == "Queued" then
+		dropQueuedRun(run)
+	elseif run.State ~= "Ended" then
+		RoundService.EndRun(run)
 	end
 end
 

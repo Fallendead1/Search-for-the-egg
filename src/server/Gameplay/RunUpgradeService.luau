@@ -1,7 +1,21 @@
 --[[
-	Handles Gameplay_RequestBuyRunUpgrade for Hand (Hold/Speed/Grasp) and Bag
-	level purchases. Pitchfork/Dynamite/Vacuum/Drone upgrades go through
-	ToolService via Gameplay_RequestToolAction instead.
+	Gameplay_RequestBuyRunUpgrade is the ONE entry point for every CASH-based
+	run upgrade/unlock purchase: Hand, Bag, Pitchfork, Dynamite, Vacuum,
+	Drone. Gameplay_RequestToolAction (ToolService) is reserved for tool
+	USE/action requests (Throw, Toggle, the Drone Gems one-round buy) --
+	never for Cash purchasing. This keeps exactly one purchase pathway the
+	client needs to know about for every Cash-cost upgrade/unlock.
+
+	Payload: { Group = "Hand"|"Bag"|"Pitchfork"|"Dynamite"|"Vacuum"|"Drone",
+	           UpgradeId = string }
+		Hand:      Hold | Speed | Grasp
+		Bag:       Upgrade
+		Pitchfork: Unlock | Sweep | Speed | Dig
+		Dynamite:  Unlock | Power | Speed | LuckyBlast
+		Vacuum:    Power | Cooling | Runtime
+		Drone:     Speed | Grasp | Capacity
+	(Vacuum/Drone have no Cash "Unlock" -- they're acquired via Robux/Gems
+	products handled entirely by MonetizationService/ToolService.)
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -13,10 +27,13 @@ local BagConfig = require(GameplayConfig.BagConfig)
 local RemotesLocator = require(script.Parent.RemotesLocator)
 local RoundService = require(script.Parent.RoundService)
 local RunPlayerStateService = require(script.Parent.RunPlayerStateService)
+local ToolService = require(script.Parent.ToolService)
 
 local RunUpgradeService = {}
 
-local function buyHandHold(player: Player, state: any)
+-- ---- Hand (no ownership gate -- base tool) ----
+
+local function buyHandHold(_player: Player, state: any)
 	if state.HandHoldUnlocked then
 		return false, "AlreadyOwned"
 	end
@@ -27,7 +44,7 @@ local function buyHandHold(player: Player, state: any)
 	return true
 end
 
-local function buyHandSpeed(player: Player, state: any)
+local function buyHandSpeed(_player: Player, state: any)
 	local nextLevel = state.HandSpeedLevel + 1
 	if nextLevel > HandConfig.MAX_LEVEL then
 		return false, "MaxLevel"
@@ -40,7 +57,7 @@ local function buyHandSpeed(player: Player, state: any)
 	return true
 end
 
-local function buyHandGrasp(player: Player, state: any)
+local function buyHandGrasp(_player: Player, state: any)
 	local nextLevel = state.HandGraspLevel + 1
 	if nextLevel > HandConfig.MAX_LEVEL then
 		return false, "MaxLevel"
@@ -53,7 +70,9 @@ local function buyHandGrasp(player: Player, state: any)
 	return true
 end
 
-local function buyBagLevel(player: Player, state: any)
+-- ---- Bag (no ownership gate -- base tool) ----
+
+local function buyBagLevel(_player: Player, state: any)
 	local nextLevel = state.BagLevel + 1
 	if nextLevel > BagConfig.MAX_LEVEL then
 		return false, "MaxLevel"
@@ -66,18 +85,32 @@ local function buyBagLevel(player: Player, state: any)
 	return true
 end
 
-local HANDLERS = {
-	Hand = {
-		Hold = buyHandHold,
-		Speed = buyHandSpeed,
-		Grasp = buyHandGrasp,
-	},
-	Bag = {
-		Level = buyBagLevel,
-	},
+-- Handlers that own their own RunPlayerStateService mutation and don't
+-- require existing tool ownership. Return (ok, reason?); RunUpgradeService
+-- broadcasts player state itself on success.
+local SIMPLE_HANDLERS = {
+	Hand = { Hold = buyHandHold, Speed = buyHandSpeed, Grasp = buyHandGrasp },
+	Bag = { Upgrade = buyBagLevel },
 }
 
-function RunUpgradeService.RequestBuy(player: Player, category: string, track: string)
+-- ---- Pitchfork / Dynamite / Vacuum / Drone: Cash unlock + leveled tracks.
+-- These delegate to ToolService, which owns tool ownership/level state and
+-- already broadcasts player state on success -- RunUpgradeService does not
+-- broadcast again for this branch.
+
+local CASH_UNLOCK_TOOLS = {
+	Pitchfork = true,
+	Dynamite = true,
+}
+
+local TOOL_UPGRADE_ID_TO_TRACK = {
+	Pitchfork = { Sweep = "Amount", Speed = "Speed", Dig = "Extra" },
+	Dynamite = { Power = "Amount", Speed = "Speed", LuckyBlast = "Extra" },
+	Vacuum = { Power = "Amount", Cooling = "Speed", Runtime = "Extra" },
+	Drone = { Speed = "Speed", Grasp = "Amount", Capacity = "Extra" },
+}
+
+function RunUpgradeService.RequestBuy(player: Player, group: string, upgradeId: string): (boolean, string?)
 	local run = RoundService.GetRunForPlayer(player)
 	if not RoundService.IsActive(run) then
 		return false, "RoundNotActive"
@@ -88,26 +121,36 @@ function RunUpgradeService.RequestBuy(player: Player, category: string, track: s
 		return false, "NoRunState"
 	end
 
-	local categoryHandlers = HANDLERS[category]
-	local handler = categoryHandlers and categoryHandlers[track]
-	if not handler then
-		return false, "InvalidUpgrade"
+	local simpleHandlers = SIMPLE_HANDLERS[group]
+	local simpleHandler = simpleHandlers and simpleHandlers[upgradeId]
+	if simpleHandler then
+		local ok, err = simpleHandler(player, state)
+		if ok then
+			RoundService.BroadcastPlayerState(player)
+		end
+		return ok, err
 	end
 
-	local ok, err = handler(player, state)
-	if ok then
-		RoundService.BroadcastPlayerState(player)
+	if upgradeId == "Unlock" and CASH_UNLOCK_TOOLS[group] then
+		return ToolService.BuyUnlock(player, group)
 	end
-	return ok, err
+
+	local trackMap = TOOL_UPGRADE_ID_TO_TRACK[group]
+	local trackName = trackMap and trackMap[upgradeId]
+	if trackName then
+		return ToolService.BuyUpgrade(player, group, trackName)
+	end
+
+	return false, "InvalidUpgrade"
 end
 
 function RunUpgradeService.Init()
 	local remote = RemotesLocator.Get("Gameplay_RequestBuyRunUpgrade")
 	remote.OnServerEvent:Connect(function(player: Player, payload: any)
-		if type(payload) ~= "table" or type(payload.Category) ~= "string" or type(payload.Track) ~= "string" then
+		if type(payload) ~= "table" or type(payload.Group) ~= "string" or type(payload.UpgradeId) ~= "string" then
 			return
 		end
-		RunUpgradeService.RequestBuy(player, payload.Category, payload.Track)
+		RunUpgradeService.RequestBuy(player, payload.Group, payload.UpgradeId)
 	end)
 end
 

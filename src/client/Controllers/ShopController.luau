@@ -26,7 +26,7 @@ local function buildBagTab(body: Instance)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = scroll
 
-	local level = PlayerState.Profile.BagLevel or 0
+	local level = PlayerState.Run.BagLevel or 0
 	local maxLevel = #DisplayConfig.Bag.Levels
 
 	Theme.newLabel({
@@ -43,7 +43,7 @@ local function buildBagTab(body: Instance)
 
 		local owned = level >= entry.Level
 		local isNext = level == entry.Level - 1
-		local affordable = isNext and PlayerState.Run.InProgress and PlayerState.Run.Cash >= entry.Cost
+		local affordable = isNext and PlayerState.Run.InProgress and PlayerState.Run.CashCents >= entry.CostCents
 
 		Theme.newLabel({
 			Text = ("Capacity %d"):format(entry.Capacity),
@@ -64,7 +64,7 @@ local function buildBagTab(body: Instance)
 			})
 		elseif isNext then
 			local buyButton = Theme.newButton({
-				Text = Format.cash(entry.Cost),
+				Text = Format.cash(entry.CostCents),
 				Size = UDim2.new(0, 120, 0, 44),
 				Position = UDim2.new(1, -10, 0.5, 0),
 				AnchorPoint = Vector2.new(1, 0.5),
@@ -173,7 +173,8 @@ local function buildGemsTab(body: Instance)
 			})
 			Theme.setButtonEnabled(buyButton, affordable)
 			buyButton.Activated:Connect(function()
-				Remotes.fireServer("Core_RequestBuyPermanentPerk", { PerkId = perk.Id })
+				-- CoreBootstrap's handler reads this as a raw perkId string.
+				Remotes.fireServer("Core_RequestBuyPermanentPerk", perk.Id)
 			end)
 		end
 	end
@@ -233,10 +234,10 @@ local function buildGemsTab(body: Instance)
 		AnchorPoint = Vector2.new(1, 0.5),
 		Parent = promoRow,
 	})
-	local hasDoubleGems = MonetizationController.hasGamePass("DoubleGems")
+	local hasDoubleGems = MonetizationController.hasGamePass("Gems2xPermanent")
 	Theme.setButtonEnabled(promoButton, hasDoubleGems)
 	promoButton.Activated:Connect(function()
-		MonetizationController.promptGamePass("DoubleGems")
+		MonetizationController.promptGamePass("Gems2xPermanent")
 	end)
 end
 

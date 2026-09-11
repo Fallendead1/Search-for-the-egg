@@ -53,13 +53,13 @@ local function tryActivate(run: any, player: Player?)
 end
 
 local function onButtonTouched(hit: BasePart)
-	local run = RoundService.GetActiveRun()
-	if not RoundService.IsActive(run) then
-		return
-	end
 	local character = hit.Parent
 	local player = character and Players:GetPlayerFromCharacter(character)
-	if not player or not table.find(run.Members, player.UserId) then
+	if not player then
+		return
+	end
+	local run = RoundService.GetRunForUserId(player.UserId)
+	if not RoundService.IsActive(run) then
 		return
 	end
 	tryActivate(run, player)

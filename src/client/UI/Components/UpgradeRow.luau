@@ -10,7 +10,7 @@ local Format = require(script.Parent.Parent.Parent.Util.Format)
 
 local UpgradeRow = {}
 
-export type LevelEntry = { Level: number, Value: number, Cost: number }
+export type LevelEntry = { Level: number, Value: number, CostCents: number }
 
 export type RowConfig = {
 	Parent: Instance,
@@ -87,7 +87,7 @@ function UpgradeRow.build(config: RowConfig): Frame
 	})
 
 	local buyButton = Theme.newButton({
-		Text = Format.cash(nextEntry.Cost),
+		Text = Format.cash(nextEntry.CostCents),
 		Size = UDim2.new(0, 110, 0, 44),
 		Position = UDim2.new(1, -10, 0.5, 0),
 		AnchorPoint = Vector2.new(1, 0.5),
@@ -96,7 +96,7 @@ function UpgradeRow.build(config: RowConfig): Frame
 	})
 	Theme.setButtonEnabled(buyButton, config.Affordable)
 	buyButton.Activated:Connect(function()
-		config.OnBuy(nextLevel, nextEntry.Cost)
+		config.OnBuy(nextLevel, nextEntry.CostCents)
 	end)
 
 	return row

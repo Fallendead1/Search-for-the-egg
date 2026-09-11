@@ -172,7 +172,7 @@ end
 local function refreshHotbarStates()
 	local current = InputController.getCurrentTool()
 	for tool, button in pairs(hotbarButtons) do
-		local owned = tool == "Hand" or PlayerState.Profile.OwnedTools[tool] == true
+		local owned = PlayerState.isToolOwned(tool)
 		Theme.setButtonEnabled(button, true)
 		if not owned then
 			button.BackgroundColor3 = Theme.Colors.Locked
@@ -189,7 +189,7 @@ local function refreshHud()
 	local profile = PlayerState.Profile
 
 	if cashLabel then
-		cashLabel.Text = Format.cash(run.Cash or 0)
+		cashLabel.Text = Format.cash(run.CashCents or 0)
 	end
 	if bagLabel then
 		bagLabel.Text = ("BAG %d/%d"):format(run.BagCount or 0, run.BagCapacity or DisplayConfig.BaseBagCapacity)

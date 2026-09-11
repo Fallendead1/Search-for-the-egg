@@ -1,80 +1,135 @@
 --!strict
 -- Presentation-only data for the Upgrade Book, Shop, Class, and Chest UIs.
 --
--- These numbers mirror the game design doc so screens can render correctly
--- before the shared config modules exist. If Agent 1/3 publish
--- ReplicatedStorage.SearchForTheEgg.GameplayConfig / MetaConfig /
--- MonetizationConfig, this module prefers their values -- this file is
--- display copy only and never the source of truth for what the server
--- will actually charge or grant.
+-- Every numeric value below is sourced from the real shared config modules
+-- (GameplayConfig/MetaConfig, owned by Agent 1/3) whenever they're present,
+-- so there is exactly one source of truth for balancing numbers -- this
+-- file only adds labels/descriptions/layout that those modules don't carry.
+-- The literal fallback tables exist purely so the UI degrades gracefully
+-- (instead of erroring) if a shared module is momentarily missing in
+-- Studio; they mirror the real modules' values exactly and are never
+-- preferred over them.
+--
+-- Canonical money representation: every *Cents field here is integer cents,
+-- matching the server's authoritative RunPlayerStateService.CashCents (see
+-- RoundService's header). Format.cash(cents) converts for display.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local DisplayConfig = {}
 
-local function tryRequireShared(moduleName: string): any?
-	local root = ReplicatedStorage:FindFirstChild("SearchForTheEgg")
-	if not root then
-		return nil
+local root = ReplicatedStorage:FindFirstChild("SearchForTheEgg")
+
+local function findChild(...: string): ModuleScript?
+	local node: Instance? = root
+	for _, name in ipairs({ ... }) do
+		if not node then
+			return nil
+		end
+		node = node:FindFirstChild(name)
 	end
-	local mod = root:FindFirstChild(moduleName)
-	if not mod or not mod:IsA("ModuleScript") then
-		return nil
+	if node and node:IsA("ModuleScript") then
+		return node :: ModuleScript
 	end
-	local ok, result = pcall(require, mod)
-	if ok then
-		return result
-	end
-	warn(("[DisplayConfig] Failed to require shared module '%s': %s"):format(moduleName, tostring(result)))
 	return nil
 end
 
-DisplayConfig.GameplayConfig = tryRequireShared("GameplayConfig")
-DisplayConfig.MetaConfig = tryRequireShared("MetaConfig")
-DisplayConfig.MonetizationConfig = tryRequireShared("MonetizationConfig")
+local function tryRequire(moduleScript: ModuleScript?): any?
+	if not moduleScript then
+		return nil
+	end
+	local ok, result = pcall(require, moduleScript)
+	if ok then
+		return result
+	end
+	warn(("[DisplayConfig] Failed to require '%s': %s"):format(moduleScript:GetFullName(), tostring(result)))
+	return nil
+end
+
+local HandConfig = tryRequire(findChild("GameplayConfig", "HandConfig"))
+local BagConfig = tryRequire(findChild("GameplayConfig", "BagConfig"))
+local PitchforkConfig = tryRequire(findChild("GameplayConfig", "PitchforkConfig"))
+local DynamiteConfig = tryRequire(findChild("GameplayConfig", "DynamiteConfig"))
+local VacuumConfig = tryRequire(findChild("GameplayConfig", "VacuumConfig"))
+local DroneConfig = tryRequire(findChild("GameplayConfig", "DroneConfig"))
+local RunConfig = tryRequire(findChild("GameplayConfig", "RunConfig"))
+local ChestConfig = tryRequire(findChild("MetaConfig", "ChestConfig"))
+local ClassConfig = tryRequire(findChild("MetaConfig", "ClassConfig"))
+local PermanentPerksConfig = tryRequire(findChild("MetaConfig", "PermanentPerksConfig"))
+local MonetizationConfig = tryRequire(findChild("MetaConfig", "MonetizationConfig"))
+
+DisplayConfig.GameplayConfig = RunConfig
+DisplayConfig.MetaConfig = ClassConfig
+DisplayConfig.MonetizationConfig = MonetizationConfig
+
+-- Builds { {Level, Value, CostCents}, ... } for levels 1..maxLevel from a
+-- [0..maxLevel]-indexed shared config levels table (e.g. HandConfig.GRASP_LEVELS),
+-- reading `valueField` as the display Value. Falls back to `fallback` if the
+-- shared table isn't available.
+local function buildLevels(levelsTable: any, maxLevel: number?, valueField: string, fallback: { { Level: number, Value: number, CostCents: number } })
+	if not levelsTable then
+		return fallback
+	end
+	local built = {}
+	for level = 1, (maxLevel or 5) do
+		local entry = levelsTable[level]
+		if not entry then
+			break
+		end
+		table.insert(built, { Level = level, Value = entry[valueField], CostCents = entry.CostCents })
+	end
+	return built
+end
 
 -- ============================================================
 -- Bag capacity progression (barn counter upgrade, presented by client)
 -- ============================================================
 DisplayConfig.Bag = {
-	Base = 25,
-	Levels = {
-		{ Level = 1, Capacity = 50, Cost = 1.00 },
-		{ Level = 2, Capacity = 100, Cost = 2.50 },
-		{ Level = 3, Capacity = 150, Cost = 5.00 },
-		{ Level = 4, Capacity = 200, Cost = 7.50 },
-		{ Level = 5, Capacity = 250, Cost = 10.00 },
-	},
-	MaxCapacity = 250,
+	Base = (BagConfig and BagConfig.LEVELS[0].Capacity) or 25,
+	Levels = buildLevels(BagConfig and BagConfig.LEVELS, BagConfig and BagConfig.MAX_LEVEL, "Capacity", {
+		{ Level = 1, Value = 50, CostCents = 100 },
+		{ Level = 2, Value = 100, CostCents = 250 },
+		{ Level = 3, Value = 150, CostCents = 500 },
+		{ Level = 4, Value = 200, CostCents = 750 },
+		{ Level = 5, Value = 250, CostCents = 1000 },
+	}),
+	MaxCapacity = (BagConfig and BagConfig.MAX_NORMAL_CAPACITY) or 250,
 	InfiniteBagRobux = 16,
 }
+-- Capacity is also the field name UI reads directly (not "Value"); mirror it.
+for _, entry in ipairs(DisplayConfig.Bag.Levels) do
+	(entry :: any).Capacity = entry.Value
+end
 
 -- ============================================================
 -- HAND
 -- ============================================================
 DisplayConfig.Hand = {
-	Hold = { Cost = 1.00, Description = "Hold to collect feathers continuously." },
+	Hold = {
+		CostCents = (HandConfig and HandConfig.HOLD_UNLOCK_COST_CENTS) or 100,
+		Description = "Hold to collect feathers continuously.",
+	},
 	Speed = {
-		Base = 0.55,
+		Base = (HandConfig and HandConfig.SPEED_LEVELS[0].IntervalSeconds) or 0.55,
 		Description = "Collect feathers faster.",
-		Levels = {
-			{ Level = 1, Value = 0.50, Cost = 0.25 },
-			{ Level = 2, Value = 0.45, Cost = 0.50 },
-			{ Level = 3, Value = 0.40, Cost = 1.00 },
-			{ Level = 4, Value = 0.35, Cost = 2.50 },
-			{ Level = 5, Value = 0.30, Cost = 5.00 },
-		},
+		Levels = buildLevels(HandConfig and HandConfig.SPEED_LEVELS, HandConfig and HandConfig.MAX_LEVEL, "IntervalSeconds", {
+			{ Level = 1, Value = 0.50, CostCents = 25 },
+			{ Level = 2, Value = 0.45, CostCents = 50 },
+			{ Level = 3, Value = 0.40, CostCents = 100 },
+			{ Level = 4, Value = 0.35, CostCents = 250 },
+			{ Level = 5, Value = 0.30, CostCents = 500 },
+		}),
 	},
 	Grasp = {
-		Base = 1,
+		Base = (HandConfig and HandConfig.GRASP_LEVELS[0].Amount) or 1,
 		Description = "Collect more feathers at once.",
-		Levels = {
-			{ Level = 1, Value = 2, Cost = 0.25 },
-			{ Level = 2, Value = 3, Cost = 0.50 },
-			{ Level = 3, Value = 4, Cost = 1.00 },
-			{ Level = 4, Value = 5, Cost = 2.50 },
-			{ Level = 5, Value = 6, Cost = 5.00 },
-		},
+		Levels = buildLevels(HandConfig and HandConfig.GRASP_LEVELS, HandConfig and HandConfig.MAX_LEVEL, "Amount", {
+			{ Level = 1, Value = 2, CostCents = 25 },
+			{ Level = 2, Value = 3, CostCents = 50 },
+			{ Level = 3, Value = 4, CostCents = 100 },
+			{ Level = 4, Value = 5, CostCents = 250 },
+			{ Level = 5, Value = 6, CostCents = 500 },
+		}),
 	},
 }
 
@@ -82,169 +137,151 @@ DisplayConfig.Hand = {
 -- PITCHFORK
 -- ============================================================
 DisplayConfig.Pitchfork = {
-	CashCost = 8.00,
-	OneRoundRobux = 16,
-	PermanentRobux = 80,
+	CashCostCents = (PitchforkConfig and PitchforkConfig.UNLOCK_COST_CENTS) or 800,
+	OneRoundRobux = (PitchforkConfig and PitchforkConfig.ONE_ROUND_ROBUX) or 16,
+	PermanentRobux = (PitchforkConfig and PitchforkConfig.PERMANENT_ROBUX) or 80,
 	Description = "Stab the pile and haul out a whole forkful at once.",
 	Identity = "Slower than hand. Removes much more. Digs deeper.",
-	Sweep = {
-		Base = 8,
-		Levels = {
-			{ Level = 1, Value = 10, Cost = 2 },
-			{ Level = 2, Value = 12, Cost = 4 },
-			{ Level = 3, Value = 14, Cost = 6 },
-			{ Level = 4, Value = 16, Cost = 8 },
-			{ Level = 5, Value = 18, Cost = 10 },
-		},
-	},
-	Speed = {
-		Base = 1.80,
-		Levels = {
-			{ Level = 1, Value = 1.60, Cost = 2 },
-			{ Level = 2, Value = 1.40, Cost = 4 },
-			{ Level = 3, Value = 1.20, Cost = 6 },
-			{ Level = 4, Value = 1.00, Cost = 8 },
-			{ Level = 5, Value = 0.80, Cost = 10 },
-		},
-	},
-	Dig = {
-		Base = 1.00,
-		Levels = {
-			{ Level = 1, Value = 1.15, Cost = 2 },
-			{ Level = 2, Value = 1.30, Cost = 4 },
-			{ Level = 3, Value = 1.45, Cost = 6 },
-			{ Level = 4, Value = 1.60, Cost = 8 },
-			{ Level = 5, Value = 1.75, Cost = 10 },
-		},
-	},
+	Sweep = { Base = (PitchforkConfig and PitchforkConfig.AMOUNT_LEVELS[0].Value) or 8,
+		Levels = buildLevels(PitchforkConfig and PitchforkConfig.AMOUNT_LEVELS, PitchforkConfig and PitchforkConfig.MAX_LEVEL, "Value", {
+			{ Level = 1, Value = 10, CostCents = 200 },
+			{ Level = 2, Value = 12, CostCents = 400 },
+			{ Level = 3, Value = 14, CostCents = 600 },
+			{ Level = 4, Value = 16, CostCents = 800 },
+			{ Level = 5, Value = 18, CostCents = 1000 },
+		}) },
+	Speed = { Base = (PitchforkConfig and PitchforkConfig.SPEED_LEVELS[0].IntervalSeconds) or 1.80,
+		Levels = buildLevels(PitchforkConfig and PitchforkConfig.SPEED_LEVELS, PitchforkConfig and PitchforkConfig.MAX_LEVEL, "IntervalSeconds", {
+			{ Level = 1, Value = 1.60, CostCents = 200 },
+			{ Level = 2, Value = 1.40, CostCents = 400 },
+			{ Level = 3, Value = 1.20, CostCents = 600 },
+			{ Level = 4, Value = 1.00, CostCents = 800 },
+			{ Level = 5, Value = 0.80, CostCents = 1000 },
+		}) },
+	Dig = { Base = (PitchforkConfig and PitchforkConfig.DIG_DEPTH_LEVELS[0].Multiplier) or 1.00,
+		Levels = buildLevels(PitchforkConfig and PitchforkConfig.DIG_DEPTH_LEVELS, PitchforkConfig and PitchforkConfig.MAX_LEVEL, "Multiplier", {
+			{ Level = 1, Value = 1.15, CostCents = 200 },
+			{ Level = 2, Value = 1.30, CostCents = 400 },
+			{ Level = 3, Value = 1.45, CostCents = 600 },
+			{ Level = 4, Value = 1.60, CostCents = 800 },
+			{ Level = 5, Value = 1.75, CostCents = 1000 },
+		}) },
 }
 
 -- ============================================================
 -- DYNAMITE
 -- ============================================================
 DisplayConfig.Dynamite = {
-	CashCost = 25.00,
-	OneRoundRobux = 24,
-	PermanentRobux = 120,
+	CashCostCents = (DynamiteConfig and DynamiteConfig.UNLOCK_COST_CENTS) or 2500,
+	OneRoundRobux = (DynamiteConfig and DynamiteConfig.ONE_ROUND_ROBUX) or 24,
+	PermanentRobux = (DynamiteConfig and DynamiteConfig.PERMANENT_ROBUX) or 120,
 	Description = "Blow a crater straight through the feather pile.",
-	Power = {
-		Base = 2.40,
-		Levels = {
-			{ Level = 1, Value = 2.80, Cost = 5 },
-			{ Level = 2, Value = 3.20, Cost = 10 },
-			{ Level = 3, Value = 3.60, Cost = 15 },
-			{ Level = 4, Value = 4.00, Cost = 20 },
-			{ Level = 5, Value = 4.80, Cost = 25 },
-		},
-	},
-	Speed = {
-		Base = 12,
-		Levels = {
-			{ Level = 1, Value = 11.5, Cost = 5 },
-			{ Level = 2, Value = 11, Cost = 10 },
-			{ Level = 3, Value = 10, Cost = 15 },
-			{ Level = 4, Value = 9, Cost = 20 },
-			{ Level = 5, Value = 8.5, Cost = 25 },
-		},
-	},
-	LuckyBlast = {
-		Base = 0,
-		Levels = {
-			{ Level = 1, Value = 0.05, Cost = 5 },
-			{ Level = 2, Value = 0.10, Cost = 10 },
-			{ Level = 3, Value = 0.15, Cost = 15 },
-			{ Level = 4, Value = 0.20, Cost = 20 },
-			{ Level = 5, Value = 0.25, Cost = 25 },
-		},
-	},
+	Power = { Base = (DynamiteConfig and DynamiteConfig.POWER_LEVELS[0].Radius) or 2.40,
+		Levels = buildLevels(DynamiteConfig and DynamiteConfig.POWER_LEVELS, DynamiteConfig and DynamiteConfig.MAX_LEVEL, "Radius", {
+			{ Level = 1, Value = 2.80, CostCents = 500 },
+			{ Level = 2, Value = 3.20, CostCents = 1000 },
+			{ Level = 3, Value = 3.60, CostCents = 1500 },
+			{ Level = 4, Value = 4.00, CostCents = 2000 },
+			{ Level = 5, Value = 4.80, CostCents = 2500 },
+		}) },
+	Speed = { Base = (DynamiteConfig and DynamiteConfig.SPEED_LEVELS[0].CooldownSeconds) or 12,
+		Levels = buildLevels(DynamiteConfig and DynamiteConfig.SPEED_LEVELS, DynamiteConfig and DynamiteConfig.MAX_LEVEL, "CooldownSeconds", {
+			{ Level = 1, Value = 11.5, CostCents = 500 },
+			{ Level = 2, Value = 11, CostCents = 1000 },
+			{ Level = 3, Value = 10, CostCents = 1500 },
+			{ Level = 4, Value = 9, CostCents = 2000 },
+			{ Level = 5, Value = 8.5, CostCents = 2500 },
+		}) },
+	LuckyBlast = { Base = (DynamiteConfig and DynamiteConfig.LUCKY_BLAST_LEVELS[0].Chance) or 0,
+		Levels = buildLevels(DynamiteConfig and DynamiteConfig.LUCKY_BLAST_LEVELS, DynamiteConfig and DynamiteConfig.MAX_LEVEL, "Chance", {
+			{ Level = 1, Value = 0.05, CostCents = 500 },
+			{ Level = 2, Value = 0.10, CostCents = 1000 },
+			{ Level = 3, Value = 0.15, CostCents = 1500 },
+			{ Level = 4, Value = 0.20, CostCents = 2000 },
+			{ Level = 5, Value = 0.25, CostCents = 2500 },
+		}) },
 }
 
 -- ============================================================
--- VACUUM
+-- VACUUM (no Cash unlock -- Robux-only, see VacuumConfig)
 -- ============================================================
 DisplayConfig.Vacuum = {
-	OneRoundRobux = 40,
-	Power = {
-		Base = 5,
-		Levels = {
-			{ Level = 1, Value = 8, Cost = 5 },
-			{ Level = 2, Value = 11, Cost = 10 },
-			{ Level = 3, Value = 14, Cost = 15 },
-			{ Level = 4, Value = 17, Cost = 20 },
-			{ Level = 5, Value = 20, Cost = 25 },
-		},
-	},
-	Cooling = {
-		Base = 8,
-		Levels = {
-			{ Level = 1, Value = 7, Cost = 5 },
-			{ Level = 2, Value = 6, Cost = 10 },
-			{ Level = 3, Value = 5, Cost = 15 },
-			{ Level = 4, Value = 4, Cost = 20 },
-			{ Level = 5, Value = 3, Cost = 25 },
-		},
-	},
-	Runtime = {
-		Base = 4,
-		Levels = {
-			{ Level = 1, Value = 5, Cost = 5 },
-			{ Level = 2, Value = 6, Cost = 10 },
-			{ Level = 3, Value = 7, Cost = 15 },
-			{ Level = 4, Value = 8, Cost = 20 },
-			{ Level = 5, Value = 10, Cost = 25 },
-		},
-	},
+	OneRoundRobux = (VacuumConfig and VacuumConfig.ONE_ROUND_ROBUX) or 40,
+	Power = { Base = (VacuumConfig and VacuumConfig.POWER_LEVELS[0].FeathersPerSecond) or 5,
+		Levels = buildLevels(VacuumConfig and VacuumConfig.POWER_LEVELS, VacuumConfig and VacuumConfig.MAX_LEVEL, "FeathersPerSecond", {
+			{ Level = 1, Value = 8, CostCents = 500 },
+			{ Level = 2, Value = 11, CostCents = 1000 },
+			{ Level = 3, Value = 14, CostCents = 1500 },
+			{ Level = 4, Value = 17, CostCents = 2000 },
+			{ Level = 5, Value = 20, CostCents = 2500 },
+		}) },
+	Cooling = { Base = (VacuumConfig and VacuumConfig.COOLING_LEVELS[0].RecoverySeconds) or 8,
+		Levels = buildLevels(VacuumConfig and VacuumConfig.COOLING_LEVELS, VacuumConfig and VacuumConfig.MAX_LEVEL, "RecoverySeconds", {
+			{ Level = 1, Value = 7, CostCents = 500 },
+			{ Level = 2, Value = 6, CostCents = 1000 },
+			{ Level = 3, Value = 5, CostCents = 1500 },
+			{ Level = 4, Value = 4, CostCents = 2000 },
+			{ Level = 5, Value = 3, CostCents = 2500 },
+		}) },
+	Runtime = { Base = (VacuumConfig and VacuumConfig.RUNTIME_LEVELS[0].RuntimeSeconds) or 4,
+		Levels = buildLevels(VacuumConfig and VacuumConfig.RUNTIME_LEVELS, VacuumConfig and VacuumConfig.MAX_LEVEL, "RuntimeSeconds", {
+			{ Level = 1, Value = 5, CostCents = 500 },
+			{ Level = 2, Value = 6, CostCents = 1000 },
+			{ Level = 3, Value = 7, CostCents = 1500 },
+			{ Level = 4, Value = 8, CostCents = 2000 },
+			{ Level = 5, Value = 10, CostCents = 2500 },
+		}) },
 }
 
 -- ============================================================
--- DRONE
+-- DRONE (no Cash unlock -- Robux or Gems, see DroneConfig)
 -- ============================================================
 DisplayConfig.Drone = {
-	OneRoundRobux = 16,
-	GemsCost = 40,
-	PermanentRobux = 104,
+	OneRoundRobux = (DroneConfig and DroneConfig.ONE_ROUND_ROBUX) or 16,
+	GemsCost = (DroneConfig and DroneConfig.ONE_ROUND_GEM_COST) or 40,
+	PermanentRobux = (DroneConfig and DroneConfig.PERMANENT_ROBUX) or 104,
 	Description = "Your automatic helper.",
-	Speed = {
-		Base = 1.0,
-		Levels = {
-			{ Level = 1, Value = 1.2, Cost = 5 },
-			{ Level = 2, Value = 1.4, Cost = 10 },
-			{ Level = 3, Value = 1.6, Cost = 15 },
-			{ Level = 4, Value = 1.8, Cost = 20 },
-			{ Level = 5, Value = 2.0, Cost = 25 },
-		},
-	},
-	Grasp = {
-		Base = 5,
-		Levels = {
-			{ Level = 1, Value = 10, Cost = 5 },
-			{ Level = 2, Value = 15, Cost = 10 },
-			{ Level = 3, Value = 20, Cost = 15 },
-			{ Level = 4, Value = 25, Cost = 20 },
-			{ Level = 5, Value = 30, Cost = 25 },
-		},
-	},
-	Capacity = {
-		Base = 25,
-		Levels = {
-			{ Level = 1, Value = 50, Cost = 5 },
-			{ Level = 2, Value = 75, Cost = 10 },
-			{ Level = 3, Value = 100, Cost = 15 },
-			{ Level = 4, Value = 150, Cost = 20 },
-			{ Level = 5, Value = 200, Cost = 25 },
-		},
-	},
+	Speed = { Base = (DroneConfig and DroneConfig.SPEED_LEVELS[0].Multiplier) or 1.0,
+		Levels = buildLevels(DroneConfig and DroneConfig.SPEED_LEVELS, DroneConfig and DroneConfig.MAX_LEVEL, "Multiplier", {
+			{ Level = 1, Value = 1.2, CostCents = 500 },
+			{ Level = 2, Value = 1.4, CostCents = 1000 },
+			{ Level = 3, Value = 1.6, CostCents = 1500 },
+			{ Level = 4, Value = 1.8, CostCents = 2000 },
+			{ Level = 5, Value = 2.0, CostCents = 2500 },
+		}) },
+	Grasp = { Base = (DroneConfig and DroneConfig.GRASP_LEVELS[0].Amount) or 5,
+		Levels = buildLevels(DroneConfig and DroneConfig.GRASP_LEVELS, DroneConfig and DroneConfig.MAX_LEVEL, "Amount", {
+			{ Level = 1, Value = 10, CostCents = 500 },
+			{ Level = 2, Value = 15, CostCents = 1000 },
+			{ Level = 3, Value = 20, CostCents = 1500 },
+			{ Level = 4, Value = 25, CostCents = 2000 },
+			{ Level = 5, Value = 30, CostCents = 2500 },
+		}) },
+	Capacity = { Base = (DroneConfig and DroneConfig.CAPACITY_LEVELS[0].Capacity) or 25,
+		Levels = buildLevels(DroneConfig and DroneConfig.CAPACITY_LEVELS, DroneConfig and DroneConfig.MAX_LEVEL, "Capacity", {
+			{ Level = 1, Value = 50, CostCents = 500 },
+			{ Level = 2, Value = 75, CostCents = 1000 },
+			{ Level = 3, Value = 100, CostCents = 1500 },
+			{ Level = 4, Value = 150, CostCents = 2000 },
+			{ Level = 5, Value = 200, CostCents = 2500 },
+		}) },
 }
 
 -- ============================================================
 -- PERMANENT GEM SHOP
 -- ============================================================
+local function permanentPerkCost(perkId: string, fallback: number): number
+	local perk = PermanentPerksConfig and PermanentPerksConfig.Perks[perkId]
+	return (perk and perk.CostPerLevel) or fallback
+end
+
 DisplayConfig.PermanentPerks = {
-	{ Id = "BagSize", Name = "BAG SIZE", GemCost = 25 },
-	{ Id = "HandGrab", Name = "HAND GRAB AMOUNT", GemCost = 50 },
-	{ Id = "GemValue", Name = "GEM VALUE", GemCost = 150 },
-	{ Id = "FeatherValue", Name = "FEATHER VALUE", GemCost = 20 },
+	{ Id = "BagSize", Name = "BAG SIZE", GemCost = permanentPerkCost("BagSize", 25) },
+	{ Id = "HandGrabAmount", Name = "HAND GRAB AMOUNT", GemCost = permanentPerkCost("HandGrabAmount", 50) },
+	{ Id = "GemValue", Name = "GEM VALUE", GemCost = permanentPerkCost("GemValue", 150) },
+	{ Id = "FeatherValue", Name = "FEATHER VALUE", GemCost = permanentPerkCost("FeatherValue", 20) },
 }
+DisplayConfig.PermanentPerkMaxLevel = (PermanentPerksConfig and PermanentPerksConfig.MaxLevel) or 5
 
 DisplayConfig.GemPacks = {
 	{ Id = "Gems100", Gems = 100, Robux = 24 },
@@ -255,17 +292,46 @@ DisplayConfig.DoubleGemsRobux = 64
 -- ============================================================
 -- CLASSES
 -- ============================================================
-DisplayConfig.Classes = {
-	{ Id = "Starter", Name = "Starter", Odds = 40.0, Description = "No bonuses. Every farmer starts somewhere." },
-	{ Id = "PackMule", Name = "Pack Mule", Odds = 25.0, Description = "Carry 50% more feathers in every bag." },
-	{ Id = "FeatherMerchant", Name = "Feather Merchant", Odds = 14.0, Description = "Earn 20% more money whenever you sell feathers." },
-	{ Id = "Forkmaster", Name = "Forkmaster", Odds = 9.0, Description = "Pitchfork swings collect 25% more feathers, and pitchfork upgrades cost 25% less." },
-	{ Id = "Demolitionist", Name = "Demolitionist", Odds = 7.0, Description = "Dynamite explosions have a 20% larger blast radius. 10% chance: TNT splits into 3 mini charges." },
-	{ Id = "Prospector", Name = "Prospector", Odds = 3.9, Description = "Find extra gems while collecting feathers. Feathers can transform into a Diamond." },
-	{ Id = "DroneSpecialist", Name = "Drone Specialist", Odds = 1.0, Description = "Always own a drone. It flies 30% faster and carries 40% more feathers. Chance to call in a 3-drone work swarm." },
-	{ Id = "UltimateFarmer", Name = "Ultimate Farmer", Odds = 0.1, Description = "Receive every class's passive stat bonuses at once. Randomly activates Golden Harvest." },
+local CLASS_DESCRIPTIONS = {
+	Starter = "No bonuses. Every farmer starts somewhere.",
+	PackMule = "Carry 50% more feathers in every bag.",
+	FeatherMerchant = "Earn 20% more money whenever you sell feathers.",
+	Forkmaster = "Pitchfork swings collect 25% more feathers, and pitchfork upgrades cost 25% less.",
+	Demolitionist = "Dynamite explosions have a 20% larger blast radius. 10% chance: TNT splits into 3 mini charges.",
+	Prospector = "Find extra gems while collecting feathers. Feathers can transform into a Diamond.",
+	DroneSpecialist = "Always own a drone. It flies 30% faster and carries 40% more feathers. Chance to call in a 3-drone work swarm.",
+	UltimateFarmer = "Receive every class's passive stat bonuses at once. Randomly activates Golden Harvest.",
 }
-DisplayConfig.ClassRollCostGems = 40
+
+if ClassConfig then
+	DisplayConfig.Classes = {}
+	local totalWeight = 0
+	for _, odd in ipairs(ClassConfig.Odds) do
+		totalWeight += odd.Weight
+	end
+	for _, odd in ipairs(ClassConfig.Odds) do
+		local classInfo = ClassConfig.Classes[odd.Id]
+		table.insert(DisplayConfig.Classes, {
+			Id = odd.Id,
+			Name = (classInfo and classInfo.DisplayName) or odd.Id,
+			Odds = totalWeight > 0 and (odd.Weight / totalWeight * 100) or 0,
+			Description = CLASS_DESCRIPTIONS[odd.Id] or "",
+		})
+	end
+	DisplayConfig.ClassRollCostGems = ClassConfig.RollCostGems
+else
+	DisplayConfig.Classes = {
+		{ Id = "Starter", Name = "Starter", Odds = 40.0, Description = CLASS_DESCRIPTIONS.Starter },
+		{ Id = "PackMule", Name = "Pack Mule", Odds = 25.0, Description = CLASS_DESCRIPTIONS.PackMule },
+		{ Id = "FeatherMerchant", Name = "Feather Merchant", Odds = 14.0, Description = CLASS_DESCRIPTIONS.FeatherMerchant },
+		{ Id = "Forkmaster", Name = "Forkmaster", Odds = 9.0, Description = CLASS_DESCRIPTIONS.Forkmaster },
+		{ Id = "Demolitionist", Name = "Demolitionist", Odds = 7.0, Description = CLASS_DESCRIPTIONS.Demolitionist },
+		{ Id = "Prospector", Name = "Prospector", Odds = 3.9, Description = CLASS_DESCRIPTIONS.Prospector },
+		{ Id = "DroneSpecialist", Name = "Drone Specialist", Odds = 1.0, Description = CLASS_DESCRIPTIONS.DroneSpecialist },
+		{ Id = "UltimateFarmer", Name = "Ultimate Farmer", Odds = 0.1, Description = CLASS_DESCRIPTIONS.UltimateFarmer },
+	}
+	DisplayConfig.ClassRollCostGems = 40
+end
 
 DisplayConfig.ClassMonetization = {
 	FastRollsRobux = 144,
@@ -276,22 +342,64 @@ DisplayConfig.ClassMonetization = {
 -- ============================================================
 -- ALIEN CHEST
 -- ============================================================
-DisplayConfig.AlienChest = {
-	OpenTokenCost = 100,
-	Odds = {
-		{ Id = "GemsSmall", Label = "Gems (25-75)", Chance = 60.0, Rarity = "Common" },
-		{ Id = "GemsLarge", Label = "Gems (75-200)", Chance = 25.0, Rarity = "Uncommon" },
-		{ Id = "AlienDynamite", Label = "Alien Dynamite", Chance = 7.0, Rarity = "Rare" },
-		{ Id = "AlienVacuum", Label = "Alien Vacuum", Chance = 4.5, Rarity = "Rare" },
-		{ Id = "AlienSquidfork", Label = "Alien Squidfork", Chance = 2.5, Rarity = "Epic" },
-		{ Id = "UFO", Label = "UFO", Chance = 1.0, Rarity = "Legendary" },
-	},
-	MultiOpen = {
-		{ Count = 3, Robux = 72 },
-		{ Count = 5, Robux = 104 },
-		{ Count = 10, Robux = 184 },
-	},
+local CHEST_LABELS = {
+	GemsSmall = "Gems (25-75)",
+	GemsLarge = "Gems (75-200)",
+	AlienDynamite = "Alien Dynamite",
+	AlienVacuum = "Alien Vacuum",
+	AlienSquidfork = "Alien Squidfork",
+	UFO = "UFO",
 }
+local CHEST_RARITY = {
+	GemsSmall = "Common",
+	GemsLarge = "Uncommon",
+	AlienDynamite = "Rare",
+	AlienVacuum = "Rare",
+	AlienSquidfork = "Epic",
+	UFO = "Legendary",
+}
+
+if ChestConfig then
+	local totalWeight = 0
+	for _, entry in ipairs(ChestConfig.Rewards) do
+		totalWeight += entry.Weight
+	end
+	local odds = {}
+	for _, entry in ipairs(ChestConfig.Rewards) do
+		table.insert(odds, {
+			Id = entry.Id,
+			Label = CHEST_LABELS[entry.Id] or entry.Id,
+			Chance = totalWeight > 0 and (entry.Weight / totalWeight * 100) or 0,
+			Rarity = CHEST_RARITY[entry.Id] or "Common",
+		})
+	end
+	DisplayConfig.AlienChest = {
+		OpenTokenCost = ChestConfig.TokenCost,
+		Odds = odds,
+		MultiOpen = {
+			{ Count = 3, Robux = 72 },
+			{ Count = 5, Robux = 104 },
+			{ Count = 10, Robux = 184 },
+		},
+	}
+else
+	DisplayConfig.AlienChest = {
+		OpenTokenCost = 100,
+		Odds = {
+			{ Id = "GemsSmall", Label = "Gems (25-75)", Chance = 60.0, Rarity = "Common" },
+			{ Id = "GemsLarge", Label = "Gems (75-200)", Chance = 25.0, Rarity = "Uncommon" },
+			{ Id = "AlienDynamite", Label = "Alien Dynamite", Chance = 7.0, Rarity = "Rare" },
+			{ Id = "AlienVacuum", Label = "Alien Vacuum", Chance = 4.5, Rarity = "Rare" },
+			{ Id = "AlienSquidfork", Label = "Alien Squidfork", Chance = 2.5, Rarity = "Epic" },
+			{ Id = "UFO", Label = "UFO", Chance = 1.0, Rarity = "Legendary" },
+		},
+		MultiOpen = {
+			{ Count = 3, Robux = 72 },
+			{ Count = 5, Robux = 104 },
+			{ Count = 10, Robux = 184 },
+		},
+	}
+end
 
 -- ============================================================
 -- INVENTORY VARIANTS
@@ -322,51 +430,60 @@ DisplayConfig.InventoryCategories = {
 -- ============================================================
 -- CHAPTERS
 -- ============================================================
+local function chapterRequiresWins(chapterId: string, fallback: number): number
+	local chapter = RunConfig and RunConfig.CHAPTERS[chapterId]
+	return (chapter and chapter.RequiresWins) or fallback
+end
+local function difficultyRequiresWins(difficultyId: string, fallback: number): number
+	local difficulty = RunConfig and RunConfig.DIFFICULTY[difficultyId]
+	return (difficulty and difficulty.RequiresWins) or fallback
+end
+
 DisplayConfig.Chapters = {
 	{
 		Id = "Chapter1",
 		Name = "CHAPTER 1",
 		Subtitle = "HENHOUSE",
 		Difficulties = {
-			{ Id = "Normal", Name = "NORMAL", RequiresWins = 0 },
-			{ Id = "Hard", Name = "HARD", RequiresWins = 1 },
+			{ Id = "Normal", Name = "NORMAL", RequiresWins = difficultyRequiresWins("Normal", 0) },
+			{ Id = "Hard", Name = "HARD", RequiresWins = difficultyRequiresWins("Hard", 1) },
 		},
 	},
 	{
 		Id = "Chapter2",
 		Name = "CHAPTER 2",
 		Subtitle = "COMING SOON",
-		RequiresWins = 1,
+		RequiresWins = chapterRequiresWins("Chapter2", 1),
 		Locked = true,
 	},
 }
 
 DisplayConfig.CompletionRewards = {
-	Normal = { Gems = 40, AlienTokens = 10 },
-	Hard = { Gems = 60, AlienTokens = 20 },
+	Normal = (RunConfig and RunConfig.DIFFICULTY.Normal.CompletionReward) or { Gems = 40, AlienTokens = 10 },
+	Hard = (RunConfig and RunConfig.DIFFICULTY.Hard.CompletionReward) or { Gems = 60, AlienTokens = 20 },
 }
 
-DisplayConfig.MaxPartySize = 4
-DisplayConfig.BaseBagCapacity = 25
+DisplayConfig.MaxPartySize = (RunConfig and RunConfig.PARTY_MAX_SIZE) or 4
+DisplayConfig.BaseBagCapacity = DisplayConfig.Bag.Base
 
 -- ============================================================
 -- Monetization product/pass IDs.
 -- No IDs were provided in the GDD; MonetizationConfig (owned by Agent 1)
--- is the only valid source. Until it exists, every id resolves to nil and
--- purchase buttons using it are cleanly disabled rather than erroring.
+-- is the only valid source. Until it's filled in every id resolves to nil
+-- and purchase buttons using it are cleanly disabled rather than erroring.
 -- ============================================================
 function DisplayConfig.getProductId(key: string): number?
-	local config = DisplayConfig.MonetizationConfig
-	if config and config.Products and config.Products[key] then
-		return config.Products[key]
+	local product = MonetizationConfig and MonetizationConfig.DeveloperProducts and MonetizationConfig.DeveloperProducts[key]
+	if product and product.Id and product.Id ~= 0 then
+		return product.Id
 	end
 	return nil
 end
 
 function DisplayConfig.getPassId(key: string): number?
-	local config = DisplayConfig.MonetizationConfig
-	if config and config.GamePasses and config.GamePasses[key] then
-		return config.GamePasses[key]
+	local pass = MonetizationConfig and MonetizationConfig.GamePasses and MonetizationConfig.GamePasses[key]
+	if pass and pass.Id and pass.Id ~= 0 then
+		return pass.Id
 	end
 	return nil
 end

@@ -14,6 +14,7 @@ local UpgradeRow = require(script.Parent.Parent.UI.Components.UpgradeRow)
 local Remotes = require(script.Parent.Parent.Net.Remotes)
 local DisplayConfig = require(script.Parent.Parent.Data.DisplayConfig)
 local PlayerState = require(script.Parent.Parent.State.PlayerState)
+local Format = require(script.Parent.Parent.Util.Format)
 local MonetizationController = require(script.Parent.MonetizationController)
 local SoundController = require(script.Parent.SoundController)
 
@@ -24,9 +25,33 @@ local UpgradeBookController = {}
 local PAGES = { "HAND", "PITCHFORK", "DYNAMITE", "VACUUM", "DRONE" }
 local currentPage = "HAND"
 
+-- Maps the UpgradeId used on the wire (and in DisplayConfig's per-stat
+-- tables) to the level field RunPlayerStateService actually stores on
+-- PlayerState.Run.Tools[toolId] -- mirrors RunUpgradeService's server-side
+-- TOOL_UPGRADE_ID_TO_TRACK exactly.
+local TOOL_STAT_TO_LEVEL_FIELD: { [string]: { [string]: string } } = {
+	Pitchfork = { Sweep = "AmountLevel", Speed = "SpeedLevel", Dig = "ExtraLevel" },
+	Dynamite = { Power = "AmountLevel", Speed = "SpeedLevel", LuckyBlast = "ExtraLevel" },
+	Vacuum = { Power = "AmountLevel", Cooling = "SpeedLevel", Runtime = "ExtraLevel" },
+	Drone = { Speed = "SpeedLevel", Grasp = "AmountLevel", Capacity = "ExtraLevel" },
+}
+
 local function currentLevel(toolId: string, statId: string): number
-	local levels = PlayerState.Profile.ToolUpgradeLevels[toolId]
-	return (levels and levels[statId]) or 0
+	if toolId == "Hand" then
+		if statId == "Speed" then
+			return PlayerState.Run.HandSpeedLevel or 0
+		elseif statId == "Grasp" then
+			return PlayerState.Run.HandGraspLevel or 0
+		end
+		return 0
+	end
+
+	local toolState = PlayerState.Run.Tools and PlayerState.Run.Tools[toolId]
+	local field = TOOL_STAT_TO_LEVEL_FIELD[toolId] and TOOL_STAT_TO_LEVEL_FIELD[toolId][statId]
+	if not toolState or not field then
+		return 0
+	end
+	return toolState[field] or 0
 end
 
 local function requestBuyUpgrade(group: string, upgradeId: string)
@@ -37,7 +62,7 @@ local function requestBuyUpgrade(group: string, upgradeId: string)
 	SoundController.play("Upgrade")
 end
 
-local function buildPurchaseGate(body: Instance, toolId: string, cashCost: number?, oneRoundKey: string, permanentKey: string?, description: string, identity: string?)
+local function buildPurchaseGate(body: Instance, toolId: string, cashCostCents: number?, oneRoundKey: string, permanentKey: string?, description: string, identity: string?)
 	local panel = Instance.new("Frame")
 	panel.BackgroundTransparency = 1
 	panel.Size = UDim2.fromScale(1, 1)
@@ -82,10 +107,10 @@ local function buildPurchaseGate(body: Instance, toolId: string, cashCost: numbe
 	layout.Padding = UDim.new(0, 12)
 	layout.Parent = buttonRow
 
-	if cashCost and cashCost > 0 then
-		local affordable = PlayerState.Run.InProgress and PlayerState.Run.Cash >= cashCost
+	if cashCostCents and cashCostCents > 0 then
+		local affordable = PlayerState.Run.InProgress and PlayerState.Run.CashCents >= cashCostCents
 		local cashButton = Theme.newButton({
-			Text = ("BUY - $%.2f"):format(cashCost),
+			Text = Format.cash(cashCostCents),
 			Size = UDim2.new(0, 180, 1, 0),
 			Color = affordable and Theme.Colors.ButtonPrimary or Theme.Colors.ButtonDisabled,
 			Parent = buttonRow,
@@ -109,7 +134,27 @@ local function buildPurchaseGate(body: Instance, toolId: string, cashCost: numbe
 		MonetizationController.promptProduct(oneRoundKey)
 	end)
 
+	-- Drone's alternate one-round buy: Gems instead of Robux (see
+	-- ToolService.BuyDroneWithGems / Gameplay_RequestToolAction).
+	if toolId == "Drone" then
+		local gemsCost = DisplayConfig.Drone.GemsCost
+		local gemsAffordable = PlayerState.Run.InProgress and PlayerState.Profile.Gems >= gemsCost
+		local gemsButton = Theme.newButton({
+			Text = ("1 ROUND - %d GEMS"):format(gemsCost),
+			Size = UDim2.new(0, 180, 1, 0),
+			Color = gemsAffordable and Theme.Colors.Gems or Theme.Colors.ButtonDisabled,
+			Parent = buttonRow,
+		})
+		Theme.setButtonEnabled(gemsButton, gemsAffordable)
+		gemsButton.Activated:Connect(function()
+			Remotes.fireServer("Gameplay_RequestToolAction", { Tool = "Drone", Action = "BuyDroneGems" })
+			SoundController.play("Upgrade")
+		end)
+	end
+
 	if permanentKey then
+		-- Permanent tool unlocks are one-time Developer Products (Kind =
+		-- "Entitlement" in MonetizationConfig), not Game Passes.
 		local permanentRobux = DisplayConfig[toolId] and DisplayConfig[toolId].PermanentRobux
 		local permanentButton = Theme.newButton({
 			Text = permanentRobux and ("PERMANENT - %d R$"):format(permanentRobux) or "PERMANENT",
@@ -117,10 +162,10 @@ local function buildPurchaseGate(body: Instance, toolId: string, cashCost: numbe
 			Color = Theme.Colors.TextGold,
 			Parent = buttonRow,
 		})
-		local hasPermanentPass = MonetizationController.hasGamePass(permanentKey)
-		Theme.setButtonEnabled(permanentButton, hasPermanentPass)
+		local hasPermanentProduct = MonetizationController.hasProduct(permanentKey)
+		Theme.setButtonEnabled(permanentButton, hasPermanentProduct)
 		permanentButton.Activated:Connect(function()
-			MonetizationController.promptGamePass(permanentKey)
+			MonetizationController.promptProduct(permanentKey)
 		end)
 	end
 end
@@ -128,8 +173,8 @@ end
 local function buildStatRows(scroll: Instance, toolId: string, stats: { { Id: string, Config: any, Format: ((number) -> string)? } })
 	for i, stat in ipairs(stats) do
 		local level = currentLevel(toolId, stat.Id)
-		local nextCost = stat.Config.Levels[level + 1] and stat.Config.Levels[level + 1].Cost or math.huge
-		local affordable = PlayerState.Run.InProgress and PlayerState.Run.Cash >= nextCost
+		local nextCostCents = stat.Config.Levels[level + 1] and stat.Config.Levels[level + 1].CostCents or math.huge
+		local affordable = PlayerState.Run.InProgress and PlayerState.Run.CashCents >= nextCostCents
 		UpgradeRow.build({
 			Parent = scroll,
 			StatName = stat.Id:upper(),
@@ -153,14 +198,14 @@ local function buildHandPage(body: Instance)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = scroll
 
-	if not PlayerState.Profile.HoldUnlocked then
-		local holdAffordable = PlayerState.Run.InProgress and PlayerState.Run.Cash >= DisplayConfig.Hand.Hold.Cost
+	if not PlayerState.Run.HandHoldUnlocked then
+		local holdAffordable = PlayerState.Run.InProgress and PlayerState.Run.CashCents >= DisplayConfig.Hand.Hold.CostCents
 		UpgradeRow.build({
 			Parent = scroll,
 			StatName = "HOLD",
 			Description = DisplayConfig.Hand.Hold.Description,
 			Base = 0,
-			Levels = { { Level = 1, Value = 1, Cost = DisplayConfig.Hand.Hold.Cost } },
+			Levels = { { Level = 1, Value = 1, CostCents = DisplayConfig.Hand.Hold.CostCents } },
 			CurrentLevel = 0,
 			Affordable = holdAffordable,
 			ValueFormatter = function()
@@ -180,8 +225,8 @@ local function buildHandPage(body: Instance)
 end
 
 local function buildToolPage(body: Instance, toolId: string, description: string, identity: string?, stats: { { Id: string, Config: any, Format: ((number) -> string)? } })
-	if not PlayerState.Profile.OwnedTools[toolId] then
-		buildPurchaseGate(body, toolId, DisplayConfig[toolId].CashCost, toolId .. "OneRound", toolId .. "Permanent", description, identity)
+	if not PlayerState.isToolOwned(toolId) then
+		buildPurchaseGate(body, toolId, DisplayConfig[toolId].CashCostCents, toolId .. "Round", toolId .. "Permanent", description, identity)
 		return
 	end
 
@@ -195,8 +240,8 @@ local function buildToolPage(body: Instance, toolId: string, description: string
 end
 
 local function buildVacuumPage(body: Instance)
-	if not PlayerState.Profile.OwnedTools.Vacuum then
-		buildPurchaseGate(body, "Vacuum", nil, "VacuumOneRound", nil, "Auto-collect feathers while heat allows.")
+	if not PlayerState.isToolOwned("Vacuum") then
+		buildPurchaseGate(body, "Vacuum", nil, "VacuumRound", nil, "Auto-collect feathers while heat allows.")
 		return
 	end
 

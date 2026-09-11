@@ -1,11 +1,16 @@
 --[[
-	Central tool ownership + generic leveled-upgrade purchasing for Pitchfork,
-	Dynamite, Vacuum, and Drone. Also the single entry point for
-	Gameplay_RequestToolAction: generic actions (Unlock/Upgrade*/BuyDroneGems)
-	are handled directly here; tool-specific actions (Throw, Toggle, Activate)
-	are dispatched to handlers that PitchforkService/DynamiteService/
-	VacuumService/DroneService register via RegisterActionHandler, so this
-	module never has to require those leaf services back.
+	Central tool ownership + leveled-upgrade state for Pitchfork, Dynamite,
+	Vacuum, and Drone. BuyUnlock/BuyUpgrade below are the mutation primitives;
+	RunUpgradeService is the only caller reached from the network (via
+	Gameplay_RequestBuyRunUpgrade -- see its header for the full Cash-upgrade
+	contract), keeping exactly one purchase pathway for the client.
+
+	Gameplay_RequestToolAction (handled here) is reserved for tool USE/action
+	requests -- never purchasing: BuyDroneGems (the Drone's Gems, not Cash,
+	one-round buy) is handled directly; tool-specific actions (Throw, Toggle)
+	are dispatched to handlers that DynamiteService/VacuumService/DroneService
+	register via RegisterActionHandler, so this module never has to require
+	those leaf services back.
 
 	One-round paid products are registered with Core's
 	MonetizationService:RegisterRunProductGrant here; the receipt/backend flow
@@ -195,12 +200,6 @@ local function handleRunProductGrant(toolName: string)
 	end
 end
 
-local GENERIC_TRACK_ACTIONS = {
-	UpgradeAmount = "Amount",
-	UpgradeSpeed = "Speed",
-	UpgradeExtra = "Extra",
-}
-
 local function onToolActionRemote(player: Player, payload: any)
 	if type(payload) ~= "table" or type(payload.Tool) ~= "string" or type(payload.Action) ~= "string" then
 		return
@@ -208,19 +207,10 @@ local function onToolActionRemote(player: Player, payload: any)
 
 	local toolName, action = payload.Tool, payload.Action
 
-	if action == "Unlock" then
-		ToolService.BuyUnlock(player, toolName)
-		return
-	end
-
+	-- Drone's alternate one-round buy is a Gems (not Cash) transaction, so it
+	-- stays here rather than under Gameplay_RequestBuyRunUpgrade.
 	if action == "BuyDroneGems" and toolName == "Drone" then
 		ToolService.BuyDroneWithGems(player)
-		return
-	end
-
-	local trackName = GENERIC_TRACK_ACTIONS[action]
-	if trackName then
-		ToolService.BuyUpgrade(player, toolName, trackName)
 		return
 	end
 

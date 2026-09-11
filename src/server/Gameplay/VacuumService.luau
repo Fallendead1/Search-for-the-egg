@@ -42,10 +42,17 @@ local function getCharacterPosition(player: Player): Vector3?
 	return root.Position
 end
 
+-- VacuumHeat is normalized 0..1 (what the client's heat bar fill reads);
+-- Active/Overheated/RuntimeElapsed are kept for any consumer that wants the
+-- raw values.
 local function replicateHeat(entry: any)
+	local runtimeLimit = VacuumConfig.RUNTIME_LEVELS[entry.State.Tools.Vacuum.ExtraLevel].RuntimeSeconds
+	local heatFraction = entry.Overheated and 1 or math.clamp(entry.RuntimeElapsed / runtimeLimit, 0, 1)
+
 	local remote = RemotesLocator.Get("Gameplay_RunState")
 	remote:FireClient(entry.Player, {
 		Type = "VacuumHeat",
+		VacuumHeat = heatFraction,
 		Active = not entry.Overheated,
 		Overheated = entry.Overheated,
 		RuntimeElapsed = entry.RuntimeElapsed,

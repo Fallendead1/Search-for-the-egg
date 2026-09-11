@@ -161,6 +161,7 @@ function FeatherPileService.FlushDeltas(pile: any)
 	local remote = RemotesLocator.Get("Gameplay_FX")
 	remote:FireAllClients({
 		Type = "PileColumnsUpdated",
+		RunId = pile.Run and pile.Run.RunId,
 		Columns = batch,
 	})
 end
@@ -272,6 +273,24 @@ function FeatherPileService.SerializeSnapshot(pile: any)
 		GridRadius = pile.GridRadius,
 		Columns = columns,
 	}
+end
+
+-- Fires the one-time full-grid snapshot every run member's client needs to
+-- build its pooled pile visualization (see the client PileController). Must
+-- be called once, right after BuildForRun, before any RemoveNear/AreaRemove
+-- delta ever fires -- otherwise a client could apply a delta to columns it
+-- hasn't rendered yet.
+function FeatherPileService.BroadcastSnapshot(pile: any)
+	local snapshot = FeatherPileService.SerializeSnapshot(pile)
+	local remote = RemotesLocator.Get("Gameplay_FX")
+	remote:FireAllClients({
+		Type = "PileSnapshot",
+		RunId = pile.Run and pile.Run.RunId,
+		Origin = snapshot.Origin,
+		ColumnSize = snapshot.ColumnSize,
+		GridRadius = snapshot.GridRadius,
+		Columns = snapshot.Columns,
+	})
 end
 
 function FeatherPileService.Destroy(pile: any)

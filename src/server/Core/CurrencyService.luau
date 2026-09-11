@@ -15,6 +15,19 @@ local DataService = require(script.Parent.DataService)
 
 local CurrencyService = {}
 
+-- Explicit source policy for CurrencyService.Award -- callers must declare
+-- whether an award is "Earned" (gameplay reward: completion, pile finds,
+-- codes, alien chest opened with Tokens) or "Purchased" (paid for with real
+-- money: developer product Gem packs, Robux-paid chest batches). Only
+-- "Earned" Gems are eligible for the Gems2xPermanent multiplier -- doubling
+-- a Robux purchase would mean players pay for 100 Gems and silently receive
+-- 200, which is not what the game pass sells.
+local CurrencySource = {
+	Earned = "Earned",
+	Purchased = "Purchased",
+}
+CurrencyService.Source = CurrencySource
+
 local VALID_CURRENCIES = {
 	Gems = true,
 	AlienTokens = true,
@@ -69,10 +82,13 @@ function CurrencyService.TrySpend(player: Player, currencyName: string, amount: 
 end
 
 -- Doubles Gems awards for players who own the Gems2xPermanent game pass.
--- Applies uniformly to every Gems award (earned or purchased) for a simple,
--- predictable "every Gems credit is doubled" mental model.
-local function applyGemsMultiplier(player: Player, currencyName: string, amount: number): number
+-- Only applies to "Earned" awards -- see CurrencySource above. A "Purchased"
+-- award (e.g. a 100/400 Gem developer product) is never doubled here.
+local function applyGemsMultiplier(player: Player, currencyName: string, amount: number, source: string): number
 	if currencyName ~= "Gems" then
+		return amount
+	end
+	if source ~= CurrencySource.Earned then
 		return amount
 	end
 
@@ -89,7 +105,10 @@ local function applyGemsMultiplier(player: Player, currencyName: string, amount:
 	return amount
 end
 
-function CurrencyService.Award(player: Player, currencyName: string, amount: number, reason: string?): (boolean, number?)
+-- `source` MUST be CurrencyService.Source.Earned or .Purchased. Defaults to
+-- Purchased (never doubled) if omitted, so a caller that forgets to declare
+-- a source fails safe instead of silently doubling an award.
+function CurrencyService.Award(player: Player, currencyName: string, amount: number, reason: string?, source: string?): (boolean, number?)
 	if not VALID_CURRENCIES[currencyName] then
 		warn(("CurrencyService.Award: invalid currency %s"):format(tostring(currencyName)))
 		return false
@@ -98,12 +117,18 @@ function CurrencyService.Award(player: Player, currencyName: string, amount: num
 		return false
 	end
 
+	source = source or CurrencySource.Purchased
+	if source ~= CurrencySource.Earned and source ~= CurrencySource.Purchased then
+		warn(("CurrencyService.Award: invalid source %s"):format(tostring(source)))
+		return false
+	end
+
 	local currencies = getCurrencies(player)
 	if not currencies then
 		return false
 	end
 
-	local finalAmount = applyGemsMultiplier(player, currencyName, amount)
+	local finalAmount = applyGemsMultiplier(player, currencyName, amount, source)
 	currencies[currencyName] += finalAmount
 
 	return true, finalAmount

@@ -12,6 +12,7 @@ local Gameplay = script.Parent
 
 local RemotesLocator = require(Gameplay.RemotesLocator)
 local PartyService = require(Gameplay.PartyService)
+local PartyPadService = require(Gameplay.PartyPadService)
 local RoundService = require(Gameplay.RoundService)
 local EggService = require(Gameplay.EggService)
 local FarmerService = require(Gameplay.FarmerService)
@@ -26,6 +27,7 @@ local UFOSecretService = require(Gameplay.UFOSecretService)
 
 RemotesLocator.Init()
 PartyService.Init()
+PartyPadService.Init()
 RoundService.Init()
 EggService.Init()
 FarmerService.Init()

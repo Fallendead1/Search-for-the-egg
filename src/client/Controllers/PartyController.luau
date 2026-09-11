@@ -117,10 +117,8 @@ local function renderChapterSelection()
 					end
 					selectedChapter = chapter.Id
 					selectedDifficulty = difficulty.Id
-					Remotes.fireServer("Gameplay_RequestSetPartySelection", {
-						Chapter = chapter.Id,
-						Difficulty = difficulty.Id,
-					})
+					-- PartyService.Init's handler reads (player, chapterId, difficultyId) positionally.
+					Remotes.fireServer("Gameplay_RequestSetPartySelection", chapter.Id, difficulty.Id)
 					renderInParty()
 				end)
 			end
@@ -204,8 +202,8 @@ function PartyController.init()
 			return
 		end
 		PlayerState.applyPartyState(state)
-		if state.Chapter then
-			selectedChapter = state.Chapter
+		if state.ChapterId then
+			selectedChapter = state.ChapterId
 		end
 		if state.Difficulty then
 			selectedDifficulty = state.Difficulty

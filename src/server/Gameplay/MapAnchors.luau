@@ -72,6 +72,26 @@ function MapAnchors.GetChickens(): { Instance }
 	return CollectionService:GetTagged(RunConfig.TAGS.Chicken)
 end
 
+-- Every tagged Lobby party pad (SFTE_PartyPad), in no particular order. See
+-- PartyPadService for how these are turned into create/join touch zones.
+function MapAnchors.GetPartyPads(): { Instance }
+	local tagged = CollectionService:GetTagged(RunConfig.TAGS.PartyPad)
+	if #tagged == 0 then
+		warnOnce(RunConfig.TAGS.PartyPad, "no physical party pads -- only the fallback UI create button will work")
+	end
+	return tagged
+end
+
+-- Every tagged Bag-upgrade counter (SFTE_BagUpgradeCounter). See the client
+-- BagCounterController for how these open the Shop's BAG tab.
+function MapAnchors.GetBagUpgradeCounters(): { Instance }
+	local tagged = CollectionService:GetTagged(RunConfig.TAGS.BagUpgradeCounter)
+	if #tagged == 0 then
+		warnOnce(RunConfig.TAGS.BagUpgradeCounter, "Bag upgrade stays reachable only via the Shop button")
+	end
+	return tagged
+end
+
 function MapAnchors.GetSafeEggFallbackPosition(): Vector3
 	local anchor = firstTagged(RunConfig.TAGS.SafeEggFallback)
 	if anchor and anchor:IsA("BasePart") then

@@ -136,7 +136,7 @@ function EggService.MarkTurnedIn(run: any)
 end
 
 local function handleCarrierLost(userId: number)
-	local run = RoundService.GetActiveRun()
+	local run = RoundService.GetRunForUserId(userId)
 	if not run then
 		return
 	end

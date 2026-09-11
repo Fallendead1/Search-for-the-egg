@@ -1,14 +1,15 @@
 -- Shared Luau type definitions for Core_* remote payloads. These describe
 -- the contract between the Core (server) and Client/Gameplay agents.
 
+-- Flat on the wire (not nested under Result) -- ClassId/IsNew/DisplayName
+-- are only present when Success is true; Reason/Message only when false.
 export type ClassRollResultPayload = {
 	Success: boolean,
 	Reason: string?,
-	Result: {
-		ClassId: string,
-		IsNew: boolean,
-		DisplayName: string,
-	}?,
+	Message: string?,
+	ClassId: string?,
+	IsNew: boolean?,
+	DisplayName: string?,
 }
 
 export type AlienChestReward = {

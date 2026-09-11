@@ -23,29 +23,40 @@ PlayerState.Profile = {
 	PermanentPerkLevels = {} :: { [string]: number },
 	OwnedSkins = {} :: { [string]: boolean },
 	EquippedSkins = {} :: { [string]: string },
-	BagLevel = 0,
-	InfiniteBag = false,
-	HoldUnlocked = false,
+	-- Persistent one-time Developer Product grants (Kind = "Entitlement" in
+	-- MonetizationConfig): PitchforkPermanent, DynamitePermanent,
+	-- VacuumPermanent, DronePermanent, FastRolls, ClassLuck2x,
+	-- ExtraClassSlot, InfiniteBag, etc. From Core_ProfileUpdated's
+	-- EntitlementSummary. NOT Game Pass ownership (see MonetizationController
+	-- .ownsEntitlement vs .ownsGamePass).
+	EntitlementSummary = {} :: { [string]: boolean },
 }
 
 PlayerState.Run = {
 	InProgress = false,
-	Cash = 0,
+	RunId = nil :: string?,
+	CashCents = 0,
 	BagCount = 0,
 	BagCapacity = 25,
+	BagLevel = 0,
 	StartedAt = nil :: number?,
-	Chapter = nil :: string?,
+	ChapterId = nil :: string?,
 	Difficulty = nil :: string?,
+	HandHoldUnlocked = false,
 	HandSpeed = 0.55,
 	HandGrasp = 1,
+	HandSpeedLevel = 0,
+	HandGraspLevel = 0,
 	CarryingEgg = false,
 	VacuumHeat = 0,
+	-- [toolName] = { Ownership: "Locked"|"RunOwned"|"PermanentOwned", AmountLevel, SpeedLevel, ExtraLevel }
+	Tools = {} :: { [string]: any },
 }
 
 PlayerState.Party = {
 	InParty = false,
 	Members = {} :: { number },
-	Chapter = nil :: string?,
+	ChapterId = nil :: string?,
 	Difficulty = nil :: string?,
 	Started = false,
 }
@@ -73,6 +84,17 @@ function PlayerState.applyPartyState(state: { [string]: any })
 		PlayerState.Party[key] = value
 	end
 	PlayerState.PartyChanged:Fire(PlayerState.Party)
+end
+
+-- Tool ownership is run-scoped server state (PlayerState.Run.Tools, from the
+-- Gameplay_RunState "PlayerState" message) -- never persistent profile data.
+-- Hand is always available (the base tool, no ownership gate).
+function PlayerState.isToolOwned(tool: string): boolean
+	if tool == "Hand" then
+		return true
+	end
+	local toolState = PlayerState.Run.Tools and PlayerState.Run.Tools[tool]
+	return toolState ~= nil and toolState.Ownership ~= "Locked"
 end
 
 return PlayerState

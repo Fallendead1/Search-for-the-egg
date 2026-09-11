@@ -29,6 +29,7 @@ local RemoteNames = {
 
 	-- Gameplay: party (owned/handled by the Gameplay agent)
 	Gameplay_RequestCreateParty = "Gameplay_RequestCreateParty",
+	Gameplay_RequestJoinParty = "Gameplay_RequestJoinParty",
 	Gameplay_RequestSetPartySelection = "Gameplay_RequestSetPartySelection",
 	Gameplay_RequestStartParty = "Gameplay_RequestStartParty",
 	Gameplay_RequestLeaveParty = "Gameplay_RequestLeaveParty",

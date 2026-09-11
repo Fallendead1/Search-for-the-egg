@@ -30,10 +30,10 @@ local function rollReward()
 	return ChestConfig.Rewards[1]
 end
 
-local function grantReward(player: Player, entry)
+local function grantReward(player: Player, entry, source: string)
 	if entry.Type == "Gems" then
 		local amount = math.random(entry.Min, entry.Max)
-		CurrencyService.Award(player, "Gems", amount, "AlienChest")
+		CurrencyService.Award(player, "Gems", amount, "AlienChest", source)
 		return { Type = "Gems", Amount = amount }
 	elseif entry.Type == "Skin" then
 		InventoryService.GrantSkin(player, entry.Category, entry.SkinId, "AlienChest")
@@ -60,7 +60,7 @@ function ChestService.OpenWithTokens(player: Player, count: number?): (boolean, 
 
 	local rewards = {}
 	for _ = 1, count do
-		table.insert(rewards, grantReward(player, rollReward()))
+		table.insert(rewards, grantReward(player, rollReward(), CurrencyService.Source.Earned))
 	end
 
 	DataService.PushProfileUpdated(player)
@@ -81,7 +81,7 @@ function ChestService.OpenPaidBatch(player: Player, count: number): (boolean, an
 
 	local rewards = {}
 	for _ = 1, count do
-		table.insert(rewards, grantReward(player, rollReward()))
+		table.insert(rewards, grantReward(player, rollReward(), CurrencyService.Source.Purchased))
 	end
 
 	DataService.PushProfileUpdated(player)

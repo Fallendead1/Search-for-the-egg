@@ -156,6 +156,10 @@ function RunPlayerStateService.ClearBag(state: any): (number, number)
 	return normal, rainbow
 end
 
+-- Canonical Gameplay_RunState "PlayerState" field set -- see RoundService
+-- header for the full documented Gameplay_RunState contract. HandSpeed here
+-- is the actual collection interval in seconds (what InputController's
+-- client-side cadence gate reads), not a level index.
 function RunPlayerStateService.SerializeForClient(state: any)
 	return {
 		CashCents = state.CashCents,
@@ -164,6 +168,8 @@ function RunPlayerStateService.SerializeForClient(state: any)
 		BagLevel = state.BagLevel,
 		RainbowInBag = state.RainbowInBag,
 		HandHoldUnlocked = state.HandHoldUnlocked,
+		HandSpeed = RunPlayerStateService.EffectiveHandInterval(state),
+		HandGrasp = RunPlayerStateService.EffectiveHandAmount(state),
 		HandSpeedLevel = state.HandSpeedLevel,
 		HandGraspLevel = state.HandGraspLevel,
 		CarryingEgg = state.CarryingEgg,

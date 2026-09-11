@@ -46,10 +46,10 @@ function CodeService.RedeemCode(player: Player, rawCode: any): (boolean, any)
 	profile.CodesRedeemed[code] = os.time()
 
 	if reward.Gems and reward.Gems > 0 then
-		CurrencyService.Award(player, "Gems", reward.Gems, "Code:" .. code)
+		CurrencyService.Award(player, "Gems", reward.Gems, "Code:" .. code, CurrencyService.Source.Earned)
 	end
 	if reward.AlienTokens and reward.AlienTokens > 0 then
-		CurrencyService.Award(player, "AlienTokens", reward.AlienTokens, "Code:" .. code)
+		CurrencyService.Award(player, "AlienTokens", reward.AlienTokens, "Code:" .. code, CurrencyService.Source.Earned)
 	end
 
 	DataService.PushProfileUpdated(player)

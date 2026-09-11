@@ -144,9 +144,9 @@ local function buildLeftPromo(parent: Instance)
 		AnchorPoint = Vector2.new(0.5, 1),
 		Parent = promo,
 	})
-	Theme.setButtonEnabled(buyButton, MonetizationController.hasGamePass("DoubleGems"))
+	Theme.setButtonEnabled(buyButton, MonetizationController.hasGamePass("Gems2xPermanent"))
 	buyButton.Activated:Connect(function()
-		MonetizationController.promptGamePass("DoubleGems")
+		MonetizationController.promptGamePass("Gems2xPermanent")
 	end)
 end
 

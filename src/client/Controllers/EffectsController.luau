@@ -2,6 +2,11 @@
 -- Presentation dispatch for Gameplay_FX. Gameplay/world systems (Agent 3)
 -- decide when something happens; this controller only reacts visually and
 -- never mutates gameplay state (no pile removal, no reward selection).
+--
+-- Dispatches on payload.Type, matching the server's actual Gameplay_FX
+-- senders exactly (CollectionService, DynamiteService, DroneService,
+-- RoundService, UFOSecretService -- see each for its payload shape).
+-- PileSnapshot/PileColumnsUpdated are handled by PileController, not here.
 
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
@@ -18,19 +23,20 @@ EffectsController.GoldenHarvestChanged = Signal.new() :: Signal.Signal
 
 local goldenHarvestHighlight: Highlight? = nil
 
-local function playPointFlash(position: Vector3, color: Color3)
+local function playPointFlash(position: Vector3, color: Color3, startSize: number, endSize: number)
 	local part = Instance.new("Part")
 	part.Shape = Enum.PartType.Ball
-	part.Size = Vector3.new(1, 1, 1)
+	part.Size = Vector3.new(startSize, startSize, startSize)
 	part.Anchored = true
 	part.CanCollide = false
+	part.CanQuery = false
 	part.Material = Enum.Material.Neon
 	part.Color = color
 	part.Position = position
 	part.Parent = Workspace
 
 	local tween = TweenService:Create(part, TweenInfo.new(0.5, Enum.EasingStyle.Quad), {
-		Size = Vector3.new(6, 6, 6),
+		Size = Vector3.new(endSize, endSize, endSize),
 		Transparency = 1,
 	})
 	tween:Play()
@@ -39,37 +45,23 @@ local function playPointFlash(position: Vector3, color: Color3)
 	end)
 end
 
-local function onExplosion(payload: any)
+local function onCollectHit(payload: any)
+	SoundController.play("Collect", 0.3)
+	if typeof(payload.Position) == "Vector3" then
+		playPointFlash(payload.Position, Color3.fromRGB(235, 225, 200), 0.6, 2)
+	end
+end
+
+local function onDynamiteExplosion(payload: any)
 	SoundController.play("Explosion")
-	local position = payload and payload.Position
-	if typeof(position) == "Vector3" then
-		playPointFlash(position, Color3.fromRGB(255, 150, 60))
+	if typeof(payload.Position) == "Vector3" then
+		local radius = typeof(payload.Radius) == "number" and payload.Radius or 3
+		playPointFlash(payload.Position, Color3.fromRGB(255, 150, 60), 1, radius * 2)
 	end
 end
 
-local function onRainbowFeather(payload: any)
-	SoundController.play("RainbowFeather")
-	local position = payload and payload.Position
-	if typeof(position) == "Vector3" then
-		playPointFlash(position, Color3.fromRGB(200, 120, 255))
-	end
-	NotificationController.push("Rainbow Feather found!", "Success")
-end
-
-local function onGemPickup(payload: any)
-	SoundController.play("Gem")
-	local position = payload and payload.Position
-	if typeof(position) == "Vector3" then
-		playPointFlash(position, Color3.fromRGB(90, 220, 210))
-	end
-end
-
-local function onEggDiscovery()
-	SoundController.play("EggDiscovery")
-end
-
-local function onEggPickup()
-	SoundController.play("EggPickup")
+local function onDynamiteThrown(_payload: any)
+	SoundController.play("DynamiteThrow", 0.5)
 end
 
 local function setGoldenHarvest(active: boolean)
@@ -99,39 +91,37 @@ local function setGoldenHarvest(active: boolean)
 	EffectsController.GoldenHarvestChanged:Fire(active)
 end
 
-local function onUfoEvent(payload: any)
-	local phase = payload and payload.Phase
-	SoundController.play("UfoEvent")
-	if phase == "Arrival" or phase == nil then
-		CameraController.playUfoEmphasis()
-		NotificationController.push("A UFO has appeared!", "Info")
-	elseif phase == "Departure" then
-		NotificationController.push("The UFO has departed.", "Info")
+local function onGoldenHarvest(payload: any)
+	setGoldenHarvest(payload.Active == true)
+end
+
+local function onDroneState(payload: any)
+	if payload.Phase == "FlyToPile" or payload.Phase == "FlyToSell" then
+		SoundController.play("Drone", 0.25)
 	end
 end
 
+local function onUfoSecretTriggered(_payload: any)
+	SoundController.play("UfoEvent")
+	CameraController.playUfoEmphasis()
+	NotificationController.push("A UFO has abducted a chicken!", "Info")
+end
+
 local HANDLERS: { [string]: (any) -> () } = {
-	Explosion = onExplosion,
-	RainbowFeather = onRainbowFeather,
-	GemPickup = onGemPickup,
-	DiamondPickup = onGemPickup,
-	EggDiscovery = onEggDiscovery,
-	EggPickup = onEggPickup,
-	GoldenHarvestStart = function()
-		setGoldenHarvest(true)
-	end,
-	GoldenHarvestEnd = function()
-		setGoldenHarvest(false)
-	end,
-	UfoEvent = onUfoEvent,
+	CollectHit = onCollectHit,
+	DynamiteExplosion = onDynamiteExplosion,
+	DynamiteThrown = onDynamiteThrown,
+	GoldenHarvest = onGoldenHarvest,
+	DroneState = onDroneState,
+	UFOSecretTriggered = onUfoSecretTriggered,
 }
 
 function EffectsController.init()
 	Remotes.onClientEvent("Gameplay_FX", function(payload: any)
-		if type(payload) ~= "table" or type(payload.Kind) ~= "string" then
+		if type(payload) ~= "table" or type(payload.Type) ~= "string" then
 			return
 		end
-		local handler = HANDLERS[payload.Kind]
+		local handler = HANDLERS[payload.Type]
 		if handler then
 			handler(payload)
 		end

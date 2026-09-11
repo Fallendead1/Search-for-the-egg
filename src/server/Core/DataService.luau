@@ -77,14 +77,25 @@ function DataService.GetProfile(player: Player)
 	return handle.Data
 end
 
-local function cloneMapOfMaps(source: { [string]: { [string]: boolean } })
-	local result = {}
-	for key, inner in source do
-		result[key] = table.clone(inner)
+-- Category-nested OwnedSkins ({Pitchfork={Default=true}, ...}) flattened to
+-- "Category_SkinId" -> true, matching the client's composite-key lookup
+-- (InventoryController.isOwned).
+local function flattenOwnedSkins(ownedSkinsByCategory: { [string]: { [string]: boolean } })
+	local flat = {}
+	for category, skins in pairs(ownedSkinsByCategory) do
+		for skinId, owned in pairs(skins) do
+			if owned then
+				flat[category .. "_" .. skinId] = true
+			end
+		end
 	end
-	return result
+	return flat
 end
 
+-- Canonical Core_ProfileUpdated contract: a FLAT snapshot. The client's
+-- Controllers (Lobby/Class/Chest/Inventory/Shop/Stats/Party) all read these
+-- exact top-level fields directly off PlayerState.Profile -- never nested
+-- Currencies/Stats/Classes/Inventory sub-tables.
 function DataService.GetPublicSnapshot(player: Player)
 	local profile = DataService.GetProfile(player)
 	if not profile then
@@ -92,18 +103,20 @@ function DataService.GetPublicSnapshot(player: Player)
 	end
 
 	return {
-		Currencies = table.clone(profile.Currencies),
-		Stats = table.clone(profile.Stats),
-		PermanentPerks = table.clone(profile.PermanentPerks),
-		Classes = {
-			Owned = table.clone(profile.Classes.Owned),
-			Equipped = table.clone(profile.Classes.Equipped),
-			Slot2Unlocked = profile.Classes.Slot2Unlocked,
-		},
-		Inventory = {
-			OwnedSkins = cloneMapOfMaps(profile.Inventory.OwnedSkins),
-			SelectedSkins = table.clone(profile.Inventory.SelectedSkins),
-		},
+		Gems = profile.Currencies.Gems,
+		AlienTokens = profile.Currencies.AlienTokens,
+		TotalWins = profile.Stats.Wins,
+		TimeRecord = profile.Stats.BestTime,
+		TotalPlaytime = profile.Stats.TotalPlaytime,
+		FeathersCollected = profile.Stats.TotalFeathersCollected,
+		PermanentPerkLevels = table.clone(profile.PermanentPerks),
+		EquippedClass = profile.Classes.Equipped.Slot1,
+		SecondClass = profile.Classes.Equipped.Slot2,
+		SecondSlotUnlocked = profile.Classes.Slot2Unlocked,
+		OwnedSkins = flattenOwnedSkins(profile.Inventory.OwnedSkins),
+		EquippedSkins = table.clone(profile.Inventory.SelectedSkins),
+		-- Persistent one-time Developer Product grants (Kind = "Entitlement");
+		-- see MonetizationController.ownsEntitlement on the client.
 		EntitlementSummary = table.clone(profile.Entitlements),
 	}
 end
@@ -144,7 +157,9 @@ local function onPlayerRemoving(player: Player)
 
 	if handle then
 		profileReleasingEvent:Fire(player)
-		store:Save(handle)
+		-- Release already writes handle.Data as part of clearing the session
+		-- lock (see ProfileStore:Release) -- an extra Save here would be a
+		-- redundant DataStore round-trip on every leave/shutdown.
 		store:Release(handle)
 	end
 end

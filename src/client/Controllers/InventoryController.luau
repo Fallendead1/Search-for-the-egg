@@ -70,10 +70,8 @@ local function buildVariantCard(parent: Instance, categoryId: string, variant: {
 		if equipped then
 			return
 		end
-		Remotes.fireServer("Core_RequestSelectSkin", {
-			Category = categoryId,
-			Variant = variant.Id,
-		})
+		-- CoreBootstrap's handler reads (player, category, skinId) positionally.
+		Remotes.fireServer("Core_RequestSelectSkin", categoryId, variant.Id)
 	end)
 end
 

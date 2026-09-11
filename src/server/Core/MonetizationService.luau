@@ -89,7 +89,7 @@ end
 
 local function processProduct(player: Player, key: string, config, purchaseId: string)
 	if config.Kind == "Gems" then
-		CurrencyService.Award(player, "Gems", config.Amount, "Purchase:" .. key)
+		CurrencyService.Award(player, "Gems", config.Amount, "Purchase:" .. key, CurrencyService.Source.Purchased)
 	elseif config.Kind == "Entitlement" then
 		grantEntitlement(player, config.EntitlementKey)
 		if config.EntitlementKey == "ExtraClassSlot" then

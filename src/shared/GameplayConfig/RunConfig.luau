@@ -132,6 +132,9 @@ RunConfig.TAGS = {
 	RedButton = "SFTE_RedButton",
 	Chicken = "SFTE_Chicken",
 	SafeEggFallback = "SFTE_EggFallbackSpot",
+	-- Lobby world hookups (see PartyPadService / client BagCounterController).
+	PartyPad = "SFTE_PartyPad",
+	BagUpgradeCounter = "SFTE_BagUpgradeCounter",
 }
 
 return RunConfig

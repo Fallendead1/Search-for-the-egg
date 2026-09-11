@@ -17,6 +17,16 @@ local MetaProgressionService = {}
 
 local VALID_DIFFICULTIES = { Normal = true, Hard = true }
 
+-- Used by the Gameplay agent (chapter/difficulty unlock gating) via
+-- CoreLocator.GetWins.
+function MetaProgressionService.GetWins(player: Player): number
+	local stats = StatsService.GetStats(player)
+	if not stats then
+		return 0
+	end
+	return stats.Wins or 0
+end
+
 function MetaProgressionService.GetPermanentPerkLevel(player: Player, perkId: string): number
 	local profile = DataService.GetProfile(player)
 	if not profile then
@@ -102,8 +112,8 @@ function MetaProgressionService.AwardRunCompletion(player: Player, result: any)
 	local gemsAwarded = math.floor(reward.Gems * modifiers.GemRewardMultiplier + 0.5)
 	local tokensAwarded = reward.AlienTokens
 
-	local _, actualGemsAwarded = CurrencyService.Award(player, "Gems", gemsAwarded, "RunCompletion:" .. tostring(chapterId))
-	CurrencyService.Award(player, "AlienTokens", tokensAwarded, "RunCompletion:" .. tostring(chapterId))
+	local _, actualGemsAwarded = CurrencyService.Award(player, "Gems", gemsAwarded, "RunCompletion:" .. tostring(chapterId), CurrencyService.Source.Earned)
+	CurrencyService.Award(player, "AlienTokens", tokensAwarded, "RunCompletion:" .. tostring(chapterId), CurrencyService.Source.Earned)
 
 	StatsService.IncrementWins(player, reward.Wins)
 
