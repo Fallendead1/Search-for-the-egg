@@ -14,8 +14,10 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local MonetizationConfig = require(ReplicatedStorage.SearchForTheEgg.MetaConfig.MonetizationConfig)
+local RemoteNames = require(ReplicatedStorage.SearchForTheEgg.Net.RemoteNames)
 local DataService = require(script.Parent.DataService)
 local CurrencyService = require(script.Parent.CurrencyService)
+local RemoteBootstrap = require(script.Parent.RemoteBootstrap)
 
 local MonetizationService = {}
 
@@ -105,7 +107,20 @@ local function processProduct(player: Player, key: string, config, purchaseId: s
 		end
 	elseif config.Kind == "ChestMultiOpen" then
 		local ChestService = require(script.Parent.ChestService)
-		ChestService.OpenPaidBatch(player, config.ChestCount)
+		local ok, result = ChestService.OpenPaidBatch(player, config.ChestCount)
+		if ok then
+			-- Push the awarded rewards back to the owning client so the
+			-- existing Alien Chest reveal UI (Core_AlienChestResult) shows
+			-- them, same as a Token-funded open -- the client never chooses
+			-- or predicts these; ChestService already rolled them
+			-- server-side before this point.
+			local remote = RemoteBootstrap.Get(RemoteNames.Core_AlienChestResult)
+			if remote then
+				remote:FireClient(player, { Success = true, Rewards = result.Rewards })
+			end
+		else
+			warn(("MonetizationService: OpenPaidBatch failed for %s: %s"):format(key, tostring(result)))
+		end
 	else
 		warn(("MonetizationService: unknown product kind %s for %s"):format(tostring(config.Kind), key))
 	end

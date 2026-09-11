@@ -110,6 +110,7 @@ function DataService.GetPublicSnapshot(player: Player)
 		TotalPlaytime = profile.Stats.TotalPlaytime,
 		FeathersCollected = profile.Stats.TotalFeathersCollected,
 		PermanentPerkLevels = table.clone(profile.PermanentPerks),
+		OwnedClasses = table.clone(profile.Classes.Owned),
 		EquippedClass = profile.Classes.Equipped.Slot1,
 		SecondClass = profile.Classes.Equipped.Slot2,
 		SecondSlotUnlocked = profile.Classes.Slot2Unlocked,

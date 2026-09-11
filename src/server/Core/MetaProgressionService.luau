@@ -12,6 +12,7 @@ local CurrencyService = require(script.Parent.CurrencyService)
 local StatsService = require(script.Parent.StatsService)
 local ClassService = require(script.Parent.ClassService)
 local RewardService = require(script.Parent.RewardService)
+local MonetizationService = require(script.Parent.MonetizationService)
 
 local MetaProgressionService = {}
 
@@ -77,6 +78,11 @@ function MetaProgressionService.GetGameplayModifiers(player: Player)
 		GoldenHarvestEnabled = classModifiers.GoldenHarvestEnabled,
 		GoldenHarvestChance = classModifiers.GoldenHarvestChance,
 		GemRewardMultiplier = gemRewardMultiplier,
+		-- Server-authoritative permanent entitlement check (InfiniteBagPermanent
+		-- Developer Product) -- never derived from anything client-supplied.
+		-- RunPlayerStateService.EffectiveBagCapacity treats this as an
+		-- unlimited Bag once true.
+		InfiniteBag = MonetizationService.OwnsEntitlement(player, "InfiniteBag"),
 	}
 end
 

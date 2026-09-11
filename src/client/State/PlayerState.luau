@@ -15,6 +15,7 @@ PlayerState.Profile = {
 	TotalPlaytime = 0,
 	FeathersCollected = 0,
 	TimeRecord = nil :: number?,
+	OwnedClasses = {} :: { [string]: boolean },
 	EquippedClass = nil :: string?,
 	SecondClass = nil :: string?,
 	SecondSlotUnlocked = false,

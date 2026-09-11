@@ -98,7 +98,11 @@ local function buildBagTab(body: Instance)
 		Parent = infiniteRow,
 	})
 
-	if PlayerState.Profile.InfiniteBag then
+	-- InfiniteBag is a permanent Developer Product entitlement (Kind =
+	-- "Entitlement" in MonetizationConfig), not a Game Pass -- ownership is
+	-- server-authoritative via PlayerState.Profile.EntitlementSummary
+	-- (Core_ProfileUpdated), never derived from anything the client decides.
+	if MonetizationController.ownsEntitlement("InfiniteBag") then
 		Theme.newLabel({
 			Text = "OWNED",
 			Size = UDim2.new(0.4, -10, 1, 0),
@@ -116,10 +120,10 @@ local function buildBagTab(body: Instance)
 			Color = Theme.Colors.TextGold,
 			Parent = infiniteRow,
 		})
-		local hasPass = MonetizationController.hasGamePass("InfiniteBag")
-		Theme.setButtonEnabled(infiniteButton, hasPass)
+		local hasProduct = MonetizationController.hasProduct("InfiniteBagPermanent")
+		Theme.setButtonEnabled(infiniteButton, hasProduct)
 		infiniteButton.Activated:Connect(function()
-			MonetizationController.promptGamePass("InfiniteBag")
+			MonetizationController.promptProduct("InfiniteBagPermanent")
 		end)
 	end
 end

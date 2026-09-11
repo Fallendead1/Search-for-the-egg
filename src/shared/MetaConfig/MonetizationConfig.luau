@@ -22,6 +22,10 @@ MonetizationConfig.DeveloperProducts = {
 	ExtraClassSlot = { Id = 0, RobuxPrice = 96, Kind = "Entitlement", EntitlementKey = "ExtraClassSlot" },
 
 	InfiniteBagRound = { Id = 0, RobuxPrice = 16, Kind = "RunProduct", ProductKey = "InfiniteBagRound" },
+	-- Permanent Infinite Bag. Reuses InfiniteBagRound's existing GDD Robux
+	-- price (16) rather than inventing a new one -- the authoritative price
+	-- is whatever is configured on the product itself once Id is filled in.
+	InfiniteBagPermanent = { Id = 0, RobuxPrice = 16, Kind = "Entitlement", EntitlementKey = "InfiniteBag" },
 
 	PitchforkRound = { Id = 0, RobuxPrice = 16, Kind = "RunProduct", ProductKey = "PitchforkRound" },
 	PitchforkPermanent = { Id = 0, RobuxPrice = 80, Kind = "Entitlement", EntitlementKey = "PitchforkPermanent" },

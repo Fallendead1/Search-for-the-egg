@@ -79,6 +79,15 @@ local function requestSingleRoll(): any?
 	return awaitRollResult(10)
 end
 
+-- Server remains authoritative (ClassService.EquipClass re-validates
+-- ownership/slot-unlock/duplicate-class); this only sends the request and
+-- lets the next Core_ProfileUpdated (via PlayerState.ProfileChanged, see
+-- ClassController.open) refresh what's actually equipped.
+local function requestEquip(slotIndex: number, classId: string)
+	Remotes.fireServer("Core_RequestEquipClass", slotIndex, classId)
+	SoundController.play("ButtonClick")
+end
+
 local function stopAutoRoll()
 	autoRollActive = false
 	autoRollGeneration += 1
@@ -120,6 +129,61 @@ local function runAutoRollLoop(generation: number)
 	end
 end
 
+-- Builds the SLOT 1 / SLOT 2 equip buttons for one owned class row. Slot 2
+-- stays locked (no button, just a label) until SecondSlotUnlocked; either
+-- button is disabled if that class is already equipped in the OTHER slot,
+-- preventing the same class from stacking in both slots at once (the
+-- server enforces this too -- see ClassService.EquipClass's DuplicateClass
+-- check -- this is just matching UX).
+local function buildEquipRow(parent: Instance, classId: string)
+	local row = Instance.new("Frame")
+	row.Name = "EquipRow"
+	row.BackgroundTransparency = 1
+	row.Size = UDim2.new(1, -16, 0, 28)
+	row.Position = UDim2.new(0, 8, 0, 64)
+	row.Parent = parent
+
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection = Enum.FillDirection.Horizontal
+	layout.Padding = UDim.new(0, 8)
+	layout.Parent = row
+
+	local equippedSlot1 = PlayerState.Profile.EquippedClass == classId
+	local equippedSlot2 = PlayerState.Profile.SecondSlotUnlocked and PlayerState.Profile.SecondClass == classId
+
+	local slot1Button = Theme.newButton({
+		Text = equippedSlot1 and "SLOT 1: EQUIPPED" or "EQUIP SLOT 1",
+		Size = UDim2.new(0, 160, 1, 0),
+		Color = equippedSlot1 and Theme.Colors.ButtonSecondary or Theme.Colors.ButtonPrimary,
+		Parent = row,
+	})
+	Theme.setButtonEnabled(slot1Button, not equippedSlot1 and not equippedSlot2)
+	slot1Button.Activated:Connect(function()
+		requestEquip(1, classId)
+	end)
+
+	if PlayerState.Profile.SecondSlotUnlocked then
+		local slot2Button = Theme.newButton({
+			Text = equippedSlot2 and "SLOT 2: EQUIPPED" or "EQUIP SLOT 2",
+			Size = UDim2.new(0, 160, 1, 0),
+			Color = equippedSlot2 and Theme.Colors.ButtonSecondary or Theme.Colors.ButtonPrimary,
+			Parent = row,
+		})
+		Theme.setButtonEnabled(slot2Button, not equippedSlot2 and not equippedSlot1)
+		slot2Button.Activated:Connect(function()
+			requestEquip(2, classId)
+		end)
+	else
+		Theme.newLabel({
+			Text = "SLOT 2 LOCKED",
+			Size = UDim2.new(0, 160, 1, 0),
+			TextColor = Theme.Colors.Locked,
+			Font = Theme.FontBody,
+			Parent = row,
+		})
+	end
+end
+
 local function buildOddsList(parent: Instance)
 	local scroll = Overlay.newScroll(parent)
 	local layout = Instance.new("UIListLayout")
@@ -128,8 +192,10 @@ local function buildOddsList(parent: Instance)
 	layout.Parent = scroll
 
 	for i, class in ipairs(DisplayConfig.Classes) do
+		local owned = PlayerState.Profile.OwnedClasses[class.Id] == true
+
 		local row = Theme.newPanel(class.Id, scroll)
-		row.Size = UDim2.new(1, 0, 0, 64)
+		row.Size = UDim2.new(1, 0, 0, owned and 96 or 64)
 		row.LayoutOrder = i
 
 		Theme.newLabel({
@@ -147,6 +213,10 @@ local function buildOddsList(parent: Instance)
 			Font = Theme.FontBody,
 			Parent = row,
 		})
+
+		if owned then
+			buildEquipRow(row, class.Id)
+		end
 	end
 end
 
@@ -192,6 +262,21 @@ local function buildSlots(parent: Instance)
 			MonetizationController.promptProduct("ExtraClassSlot")
 		end)
 	end
+end
+
+-- Rebuilds the slots + owned-class/equip list in place. Called on open and
+-- again whenever Core_ProfileUpdated changes PlayerState.Profile (equip
+-- confirmations, new rolls, Slot 2 unlock) while the overlay is open.
+local function refreshClassesPanels(slotsFrame: Instance, oddsFrame: Instance)
+	for _, child in ipairs(slotsFrame:GetChildren()) do
+		child:Destroy()
+	end
+	buildSlots(slotsFrame)
+
+	for _, child in ipairs(oddsFrame:GetChildren()) do
+		child:Destroy()
+	end
+	buildOddsList(oddsFrame)
 end
 
 local function buildMonetizationRow(parent: Instance)
@@ -342,8 +427,13 @@ function ClassController.open()
 		task.spawn(runAutoRollLoop, generation)
 	end)
 
+	local profileConnection = PlayerState.ProfileChanged:Connect(function()
+		refreshClassesPanels(slotsFrame, oddsFrame)
+	end)
+
 	UIController.openOverlay("Classes", overlay.Frame, function()
 		stopAutoRoll()
+		profileConnection:Disconnect()
 		spinButton = nil
 		autoRollButton = nil
 		resultLabel = nil
