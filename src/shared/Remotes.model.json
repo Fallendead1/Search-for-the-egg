@@ -1,9 +1,4 @@
 {
   "className": "Folder",
-  "children": [
-    {
-      "className": "RemoteEvent",
-      "name": "EggFound"
-    }
-  ]
+  "children": []
 }

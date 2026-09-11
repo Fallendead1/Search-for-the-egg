@@ -3,7 +3,7 @@
 	join the party already assigned to it -- the primary "join a party" flow
 	(no internal party id typing required). Server-authoritative .Touched
 	connection, same trusted-physical-interaction pattern as
-	UFOSecretService/EggSpawner elsewhere in this codebase.
+	UFOSecretService's red button elsewhere in this codebase.
 
 	Gameplay_RequestCreateParty (the client's "TOUCH TO CREATE A PARTY"
 	fallback button) and Gameplay_RequestJoinParty remain available as manual

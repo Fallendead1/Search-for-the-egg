@@ -1,9 +1,8 @@
 --[[
 	Creates every remote listed in RemoteNames exactly once, under
 	ReplicatedStorage/SearchForTheEgg/Remotes. Reuses the existing "Remotes"
-	folder (already synced in via src/shared/Remotes.model.json, which also
-	holds the pre-existing EggFound remote) rather than creating a duplicate
-	container.
+	folder (already synced in via src/shared/Remotes.model.json) rather than
+	creating a duplicate container.
 
 	Every remote is a RemoteEvent -- request/response pairs (e.g.
 	Core_RequestClassRoll / Core_ClassRollResult) are two separate

@@ -1,7 +1,6 @@
 --[[
 	"DO NOT PRESS!" secret red button easter egg. No dedicated remote exists
-	for this in the contract, and it doesn't need one: like the existing
-	EggSpawner.server.luau pattern already in this repo, it's driven by a
+	for this in the contract, and it doesn't need one: it's driven by a
 	server-side .Touched connection on the tagged button part, so there's no
 	client-trusted input at all. One activation per run, no economy/reward
 	attached (flavor only), and it cleans itself up on round end.
