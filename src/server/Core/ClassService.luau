@@ -27,7 +27,12 @@ local function hasClassLuck2x(player: Player): boolean
 	return MonetizationService.OwnsEntitlement(player, "ClassLuck2x")
 end
 
-local function rollWeighted(hasLuck: boolean): string
+-- Per-class roll weight (with 2x Luck applied to eligible low-weight
+-- classes) plus the sum of all weights. Exposed (not local) so DebugTests
+-- can verify the transformation stays a well-formed distribution -- every
+-- weight positive, sum deterministic from ClassConfig.Odds -- without
+-- duplicating this logic.
+function ClassService.GetRollWeights(hasLuck: boolean): ({ [string]: number }, number)
 	local weights = {}
 	local total = 0
 
@@ -39,6 +44,12 @@ local function rollWeighted(hasLuck: boolean): string
 		weights[entry.Id] = weight
 		total += weight
 	end
+
+	return weights, total
+end
+
+local function rollWeighted(hasLuck: boolean): string
+	local weights, total = ClassService.GetRollWeights(hasLuck)
 
 	local roll = math.random() * total
 	local cursor = 0

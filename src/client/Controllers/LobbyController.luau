@@ -6,6 +6,7 @@
 local Players = game:GetService("Players")
 
 local Theme = require(script.Parent.Parent.UI.Theme)
+local Remotes = require(script.Parent.Parent.Net.Remotes)
 local DisplayConfig = require(script.Parent.Parent.Data.DisplayConfig)
 local PlayerState = require(script.Parent.Parent.State.PlayerState)
 local Format = require(script.Parent.Parent.Util.Format)
@@ -150,73 +151,141 @@ local function buildLeftPromo(parent: Instance)
 	end)
 end
 
+-- Backed by Core_RequestLeaderboard/Core_LeaderboardResult ->
+-- LeaderboardService's cached OrderedDataStore snapshot (see its header --
+-- no dependency on the old per-player "leaderstats" Folder, which no
+-- longer exists). Each row's UserId is resolved to a display name lazily
+-- (synchronously for a player on this server, async via
+-- GetNameFromUserIdAsync otherwise) so the panel never blocks on it.
+local BOARD_LABELS = { Wins = "TOP WINS", Feathers = "TOP FEATHERS", BestTime = "BEST TIMES" }
+local BOARD_ORDER = { "Wins", "Feathers", "BestTime" }
+local BOARD_TAB_TEXT = { Wins = "WINS", Feathers = "FEATHERS", BestTime = "TIME" }
+
+local function formatBoardValue(boardName: string, value: number): string
+	if boardName == "BestTime" then
+		return Format.time(value)
+	end
+	return tostring(math.floor(value))
+end
+
+local function resolvePlayerName(userId: number, onResolved: (string) -> ())
+	local existing = Players:GetPlayerByUserId(userId)
+	if existing then
+		onResolved(existing.Name)
+		return
+	end
+	task.spawn(function()
+		local ok, name = pcall(function()
+			return Players:GetNameFromUserIdAsync(userId)
+		end)
+		if ok and name then
+			onResolved(name)
+		end
+	end)
+end
+
 local function buildLeaderboard(parent: Instance)
 	local panel = Theme.newPanel("Leaderboard", parent)
-	panel.Size = UDim2.new(0, 220, 0, 220)
+	panel.Size = UDim2.new(0, 220, 0, 240)
 	panel.AnchorPoint = Vector2.new(0, 0)
 	panel.Position = UDim2.new(0, 16, 0, 10)
 
-	Theme.newLabel({
-		Text = "TOP FARMERS",
-		Size = UDim2.new(1, 0, 0, 32),
+	local titleLabel = Theme.newLabel({
+		Text = BOARD_LABELS.Wins,
+		Size = UDim2.new(1, 0, 0, 26),
 		Parent = panel,
 	})
 
+	local tabRow = Instance.new("Frame")
+	tabRow.BackgroundTransparency = 1
+	tabRow.Position = UDim2.new(0, 8, 0, 28)
+	tabRow.Size = UDim2.new(1, -16, 0, 22)
+	tabRow.Parent = panel
+
+	local tabLayout = Instance.new("UIListLayout")
+	tabLayout.FillDirection = Enum.FillDirection.Horizontal
+	tabLayout.Padding = UDim.new(0, 4)
+	tabLayout.Parent = tabRow
+
 	local list = Instance.new("Frame")
 	list.BackgroundTransparency = 1
-	list.Position = UDim2.new(0, 8, 0, 36)
-	list.Size = UDim2.new(1, -16, 1, -44)
+	list.Position = UDim2.new(0, 8, 0, 58)
+	list.Size = UDim2.new(1, -16, 1, -66)
 	list.Parent = panel
 
 	local layout = Instance.new("UIListLayout")
 	layout.Padding = UDim.new(0, 2)
 	layout.Parent = list
 
-	local function refresh()
+	local currentBoard = "Wins"
+	local latestBoards: { [string]: { { UserId: number, Value: number } } } = { Wins = {}, Feathers = {}, BestTime = {} }
+
+	local function renderCurrentBoard()
+		titleLabel.Text = BOARD_LABELS[currentBoard]
 		for _, child in ipairs(list:GetChildren()) do
-			if child:IsA("TextLabel") then
-				child:Destroy()
-			end
+			child:Destroy()
 		end
 
-		local ranked = {}
-		for _, plr in ipairs(Players:GetPlayers()) do
-			local leaderstats = plr:FindFirstChild("leaderstats")
-			local stat = leaderstats and (leaderstats:FindFirstChild("Wins") or leaderstats:FindFirstChildOfClass("IntValue"))
-			table.insert(ranked, { Name = plr.Name, Value = stat and stat.Value or 0 })
-		end
-		table.sort(ranked, function(a, b)
-			return a.Value > b.Value
-		end)
-
-		for i = 1, math.min(5, #ranked) do
-			local entry = ranked[i]
-			Theme.newLabel({
-				Text = ("%d. %s - %d"):format(i, entry.Name, entry.Value),
-				Size = UDim2.new(1, 0, 0, 22),
-				TextXAlignment = Enum.TextXAlignment.Left,
-				Font = Theme.FontBody,
-				Parent = list,
-			})
-		end
-
-		if #ranked == 0 then
+		local rows = latestBoards[currentBoard] or {}
+		if #rows == 0 then
 			Theme.newLabel({
 				Text = "No data yet.",
 				Size = UDim2.new(1, 0, 0, 22),
 				Font = Theme.FontBody,
 				Parent = list,
 			})
+			return
+		end
+
+		for i, row in ipairs(rows) do
+			if i > 5 then
+				break
+			end
+			local boardAtRenderTime = currentBoard
+			local rowLabel = Theme.newLabel({
+				Text = ("%d. Player %d - %s"):format(i, row.UserId, formatBoardValue(boardAtRenderTime, row.Value)),
+				Size = UDim2.new(1, 0, 0, 22),
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Font = Theme.FontBody,
+				Parent = list,
+			})
+			resolvePlayerName(row.UserId, function(name)
+				if rowLabel.Parent then
+					rowLabel.Text = ("%d. %s - %s"):format(i, name, formatBoardValue(boardAtRenderTime, row.Value))
+				end
+			end)
 		end
 	end
 
-	refresh()
-	Players.PlayerAdded:Connect(refresh)
-	Players.PlayerRemoving:Connect(refresh)
+	for _, boardName in ipairs(BOARD_ORDER) do
+		local tabButton = Theme.newButton({
+			Text = BOARD_TAB_TEXT[boardName],
+			Size = UDim2.new(0, 62, 1, 0),
+			Parent = tabRow,
+		})
+		tabButton.Activated:Connect(function()
+			currentBoard = boardName
+			renderCurrentBoard()
+		end)
+	end
+
+	Remotes.onClientEvent("Core_LeaderboardResult", function(payload: any)
+		if type(payload) ~= "table" then
+			return
+		end
+		latestBoards.Wins = payload.Wins or {}
+		latestBoards.Feathers = payload.Feathers or {}
+		latestBoards.BestTime = payload.BestTime or {}
+		renderCurrentBoard()
+	end)
+
+	renderCurrentBoard()
+	Remotes.fireServer("Core_RequestLeaderboard")
+
 	task.spawn(function()
 		while panel.Parent do
-			task.wait(5)
-			refresh()
+			task.wait(30)
+			Remotes.fireServer("Core_RequestLeaderboard")
 		end
 	end)
 end

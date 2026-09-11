@@ -19,6 +19,7 @@ local DEFAULT_COOLDOWNS = {
 	RedeemCode = 1,
 	EquipClass = 0.25,
 	ProfileSnapshot = 0.5,
+	RequestLeaderboard = 2,
 }
 
 function RateLimitService.CheckAndStamp(player: Player, action: string, cooldownOverride: number?): boolean

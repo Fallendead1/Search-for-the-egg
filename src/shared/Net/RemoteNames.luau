@@ -27,6 +27,10 @@ local RemoteNames = {
 	Core_RequestRedeemCode = "Core_RequestRedeemCode",
 	Core_CodeResult = "Core_CodeResult",
 
+	-- Core: leaderboards
+	Core_RequestLeaderboard = "Core_RequestLeaderboard",
+	Core_LeaderboardResult = "Core_LeaderboardResult",
+
 	-- Gameplay: party (owned/handled by the Gameplay agent)
 	Gameplay_RequestCreateParty = "Gameplay_RequestCreateParty",
 	Gameplay_RequestJoinParty = "Gameplay_RequestJoinParty",

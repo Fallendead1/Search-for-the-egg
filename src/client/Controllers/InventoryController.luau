@@ -75,18 +75,7 @@ local function buildVariantCard(parent: Instance, categoryId: string, variant: {
 	end)
 end
 
-function InventoryController.open()
-	local overlay = Overlay.new("INVENTORY")
-	overlay.CloseButton.Activated:Connect(function()
-		UIController.closeOverlay()
-	end)
-
-	local scroll = Overlay.newScroll(overlay.Body)
-	local layout = Instance.new("UIListLayout")
-	layout.Padding = UDim.new(0, 12)
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Parent = scroll
-
+local function buildCategorySections(scroll: Instance)
 	for orderIndex, category in ipairs(DisplayConfig.InventoryCategories) do
 		local section = Instance.new("Frame")
 		section.Name = category.Id
@@ -120,8 +109,39 @@ function InventoryController.open()
 			buildVariantCard(grid, category.Id, variant)
 		end
 	end
+end
 
-	UIController.openOverlay("Inventory", overlay.Frame)
+function InventoryController.open()
+	local overlay = Overlay.new("INVENTORY")
+	overlay.CloseButton.Activated:Connect(function()
+		UIController.closeOverlay()
+	end)
+
+	local scroll = Overlay.newScroll(overlay.Body)
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 12)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = scroll
+
+	buildCategorySections(scroll)
+
+	-- Ownership/equip selection is entirely Core_ProfileUpdated-driven --
+	-- rebuild in place whenever it changes so a just-confirmed skin
+	-- selection shows EQUIPPED immediately instead of only on next open.
+	-- Skips the UIListLayout (a direct child of `scroll` set up above,
+	-- not part of what buildCategorySections creates) so it isn't destroyed.
+	local profileConnection = PlayerState.ProfileChanged:Connect(function()
+		for _, child in ipairs(scroll:GetChildren()) do
+			if not child:IsA("UILayout") then
+				child:Destroy()
+			end
+		end
+		buildCategorySections(scroll)
+	end)
+
+	UIController.openOverlay("Inventory", overlay.Frame, function()
+		profileConnection:Disconnect()
+	end)
 end
 
 function InventoryController.init(ui)

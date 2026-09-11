@@ -310,7 +310,7 @@ function ShopController.open(defaultTab: string?)
 
 	selectTab(defaultTab or "BAG")
 
-	-- Bag level/cost/affordability and InfiniteBag ownership are both
+	-- Bag level/cost/affordability and InfiniteBag ownership are
 	-- authoritative server state (Gameplay_RunState and Core_ProfileUpdated
 	-- respectively) -- rebuild the BAG tab in place whenever either arrives
 	-- so it never shows a stale level/cost after a purchase confirms.
@@ -325,8 +325,24 @@ function ShopController.open(defaultTab: string?)
 		buildBagTab(frame)
 	end
 
+	-- GEMS tab (permanent perk levels, Gems balance, Gems2x ownership) is
+	-- entirely Core_ProfileUpdated-driven -- same staleness fix as BAG.
+	local function refreshGemsTab()
+		local frame = pageFrames.GEMS
+		if not frame then
+			return
+		end
+		for _, child in ipairs(frame:GetChildren()) do
+			child:Destroy()
+		end
+		buildGemsTab(frame)
+	end
+
 	local runConnection = PlayerState.RunChanged:Connect(refreshBagTab)
-	local profileConnection = PlayerState.ProfileChanged:Connect(refreshBagTab)
+	local profileConnection = PlayerState.ProfileChanged:Connect(function()
+		refreshBagTab()
+		refreshGemsTab()
+	end)
 
 	UIController.openOverlay("Shop", overlay.Frame, function()
 		runConnection:Disconnect()

@@ -14,10 +14,18 @@ local PlayerState = require(script.Parent.Parent.State.PlayerState)
 local MonetizationController = require(script.Parent.MonetizationController)
 local CameraController = require(script.Parent.CameraController)
 local SoundController = require(script.Parent.SoundController)
+local NotificationController = require(script.Parent.NotificationController)
 
 local UIController
 
 local ChestController = {}
+
+-- ChestService's Reason strings on a failed open.
+local FAILURE_MESSAGES: { [string]: string } = {
+	InvalidCount = "Invalid open count.",
+	ProfileNotLoaded = "Your profile isn't loaded yet -- try again in a moment.",
+	InsufficientTokens = "Not enough Alien Tokens.",
+}
 
 local RARITY_COLOR = {
 	Common = Theme.Colors.RarityCommon,
@@ -91,6 +99,12 @@ local function showRewardCard(reward: any, onDone: () -> ())
 	end)
 end
 
+local function refreshOpenButtonState()
+	if openButton then
+		Theme.setButtonEnabled(openButton, PlayerState.Profile.AlienTokens >= DisplayConfig.AlienChest.OpenTokenCost)
+	end
+end
+
 local function presentRewards(rewards: { any })
 	local index = 0
 	local function next()
@@ -98,9 +112,7 @@ local function presentRewards(rewards: { any })
 		local reward = rewards[index]
 		if not reward then
 			opening = false
-			if openButton then
-				Theme.setButtonEnabled(openButton, PlayerState.Profile.AlienTokens >= DisplayConfig.AlienChest.OpenTokenCost)
-			end
+			refreshOpenButtonState()
 			return
 		end
 		showRewardCard(reward, next)
@@ -201,7 +213,10 @@ function ChestController.open()
 		end)
 	end
 
+	local profileConnection = PlayerState.ProfileChanged:Connect(refreshOpenButtonState)
+
 	UIController.openOverlay("AlienChest", overlay.Frame, function()
+		profileConnection:Disconnect()
 		revealHost = nil
 		openButton = nil
 		opening = false
@@ -214,9 +229,23 @@ function ChestController.init(ui)
 	Remotes.onClientEvent("Core_AlienChestResult", function(payload: any)
 		if type(payload) ~= "table" then
 			opening = false
+			refreshOpenButtonState()
 			return
 		end
-		local rewards = payload.Rewards or { payload }
+
+		if not payload.Success then
+			opening = false
+			refreshOpenButtonState()
+			NotificationController.push(FAILURE_MESSAGES[payload.Reason] or "Chest open failed.", "Error")
+			return
+		end
+
+		local rewards = payload.Rewards
+		if type(rewards) ~= "table" or #rewards == 0 then
+			opening = false
+			refreshOpenButtonState()
+			return
+		end
 		presentRewards(rewards)
 	end)
 end

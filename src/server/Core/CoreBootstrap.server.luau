@@ -23,6 +23,7 @@ local RateLimitService = require(script.Parent.RateLimitService)
 local LeaderboardService = require(script.Parent.LeaderboardService)
 
 MonetizationService.Init()
+LeaderboardService.Init()
 
 local function remote(name: string): RemoteEvent
 	local instance = RemoteBootstrap.Get(name)
@@ -111,6 +112,20 @@ remote(RemoteNames.Core_RequestRedeemCode).OnServerEvent:Connect(function(player
 		Success = ok,
 		Reason = (not ok) and resultOrReason or nil,
 		Result = ok and resultOrReason or nil,
+	})
+end)
+
+remote(RemoteNames.Core_RequestLeaderboard).OnServerEvent:Connect(function(player)
+	if not RateLimitService.CheckAndStamp(player, "RequestLeaderboard") then
+		return
+	end
+	-- Always the cached snapshot -- never a live DataStore read triggered
+	-- by a client request (see LeaderboardService's header).
+	local boards = LeaderboardService.GetBoards()
+	remote(RemoteNames.Core_LeaderboardResult):FireClient(player, {
+		Wins = boards.Wins,
+		Feathers = boards.Feathers,
+		BestTime = boards.BestTime,
 	})
 end)
 

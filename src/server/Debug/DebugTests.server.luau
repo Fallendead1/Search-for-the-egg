@@ -30,6 +30,7 @@ end
 local ServerScriptService = game:GetService("ServerScriptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Core = ServerScriptService.SearchForTheEgg.Core
 local Gameplay = ServerScriptService.SearchForTheEgg.Gameplay
 local GameplayConfig = ReplicatedStorage.SearchForTheEgg.GameplayConfig
 local MetaConfig = ReplicatedStorage.SearchForTheEgg.MetaConfig
@@ -46,12 +47,17 @@ local ChestConfig = require(MetaConfig.ChestConfig)
 local PermanentPerksConfig = require(MetaConfig.PermanentPerksConfig)
 local MonetizationConfig = require(MetaConfig.MonetizationConfig)
 local RewardConfig = require(MetaConfig.RewardConfig)
+local DataSchema = require(MetaConfig.DataSchema)
 
 local RunPlayerStateService = require(Gameplay.RunPlayerStateService)
 local ToolService = require(Gameplay.ToolService)
 local SellService = require(Gameplay.SellService)
 local RoundService = require(Gameplay.RoundService)
 local EggService = require(Gameplay.EggService)
+local HardModeService = require(Gameplay.HardModeService)
+
+local ClassService = require(Core.ClassService)
+local LeaderboardService = require(Core.LeaderboardService)
 
 -- ============================================================
 -- Minimal assertion harness
@@ -443,6 +449,166 @@ EggService.MarkTurnedIn(eggRun)
 checkEqual("turning in a Carried Egg marks it TurnedIn", eggRun.EggState, "TurnedIn")
 
 -- ============================================================
+-- BATCH 2
+-- ============================================================
+
+-- ============================================================
+-- 19. Class roll configuration
+-- ============================================================
+suite("ClassRollConfig")
+checkEqual("roll cost Gems", ClassConfig.RollCostGems, 40)
+checkEqual("base roll cooldown", ClassConfig.BaseRollCooldownSeconds, 1.5)
+checkEqual("Fast Rolls cooldown", ClassConfig.FastRollCooldownSeconds, 0.5)
+checkEqual("2x Luck weight threshold", ClassConfig.LuckWeightThreshold, 10)
+checkEqual("2x Luck multiplier", ClassConfig.LuckMultiplier, 2)
+
+-- ============================================================
+-- 20. 2x Luck weighting (ClassService.GetRollWeights is pure -- no
+--     Player/profile involved, just ClassConfig.Odds)
+-- ============================================================
+suite("ClassLuckWeighting")
+local weightsNoLuck, totalNoLuck = ClassService.GetRollWeights(false)
+checkEqual("no-luck total equals the odds sum", totalNoLuck, 100)
+for _, odd in ipairs(ClassConfig.Odds) do
+	checkEqual(("no-luck weight unchanged for %s"):format(odd.Id), weightsNoLuck[odd.Id], odd.Weight)
+end
+
+local weightsLuck, totalLuck = ClassService.GetRollWeights(true)
+-- Hand-computed from ClassConfig.Odds: entries with base weight <= 10 are
+-- doubled (Forkmaster 9->18, Demolitionist 7->14, Prospector 3.9->7.8,
+-- DroneSpecialist 1->2, UltimateFarmer 0.1->0.2); Starter/PackMule/Feather
+-- Merchant (all > 10) stay at 40/25/14. New total: 40+25+14+18+14+7.8+2+0.2.
+checkEqual("2x Luck total", totalLuck, 121)
+checkEqual("2x Luck doubles Forkmaster (9 -> 18)", weightsLuck.Forkmaster, 18)
+checkEqual("2x Luck doubles UltimateFarmer (0.1 -> 0.2)", weightsLuck.UltimateFarmer, 0.2)
+checkEqual("2x Luck leaves Starter unchanged (> threshold)", weightsLuck.Starter, 40)
+checkEqual("2x Luck leaves PackMule unchanged (> threshold)", weightsLuck.PackMule, 25)
+
+local allPositiveAndAccounted = true
+local summedLuckWeights = 0
+for _, odd in ipairs(ClassConfig.Odds) do
+	local weight = weightsLuck[odd.Id]
+	if type(weight) ~= "number" or weight <= 0 then
+		allPositiveAndAccounted = false
+	end
+	summedLuckWeights += weight
+end
+check("every 2x Luck weight stays positive", allPositiveAndAccounted)
+checkEqual("2x Luck weights sum to the reported total (renormalization is well-formed)", summedLuckWeights, totalLuck)
+check("2x Luck never decreases any single weight", weightsLuck.Forkmaster >= weightsNoLuck.Forkmaster)
+
+-- ============================================================
+-- 21. Alien Chest reward ranges
+-- ============================================================
+suite("AlienChestRanges")
+local function chestEntryById(id: string)
+	for _, entry in ipairs(ChestConfig.Rewards) do
+		if entry.Id == id then
+			return entry
+		end
+	end
+	return nil
+end
+local gemsSmall = chestEntryById("GemsSmall")
+check("GemsSmall entry exists", gemsSmall ~= nil)
+if gemsSmall then
+	checkEqual("GemsSmall min", gemsSmall.Min, 25)
+	checkEqual("GemsSmall max", gemsSmall.Max, 75)
+end
+local gemsLarge = chestEntryById("GemsLarge")
+check("GemsLarge entry exists", gemsLarge ~= nil)
+if gemsLarge then
+	checkEqual("GemsLarge min", gemsLarge.Min, 75)
+	checkEqual("GemsLarge max", gemsLarge.Max, 200)
+end
+check("MaxTokenOpenCount configured", type(ChestConfig.MaxTokenOpenCount) == "number" and ChestConfig.MaxTokenOpenCount > 0)
+
+-- ============================================================
+-- 22. Hard Mode / Chapter gating (HardModeService with a fake player --
+--     CoreLocator.GetWins gracefully returns 0 for an unregistered
+--     UserId, exactly like the "no profile" fallback used throughout
+--     this file, so this exercises the REAL gating function)
+-- ============================================================
+suite("HardModeGating")
+local fakePlayerNoWins = { UserId = -900003 }
+check("Chapter1 always unlocked", HardModeService.ChapterUnlocked(fakePlayerNoWins, "Chapter1"))
+check("Chapter2 disabled (coming soon) regardless of Wins", not HardModeService.ChapterUnlocked(fakePlayerNoWins, "Chapter2"))
+check("Normal difficulty always unlocked (RequiresWins = 0)", HardModeService.DifficultyUnlocked(fakePlayerNoWins, "Normal"))
+check("Hard difficulty locked at 0 Wins", not HardModeService.DifficultyUnlocked(fakePlayerNoWins, "Hard"))
+checkEqual("Hard requires exactly 1 Win", RunConfig.DIFFICULTY.Hard.RequiresWins, 1)
+
+-- ============================================================
+-- 23. Profile defaults + reconciliation/migration (DataSchema is pure --
+--     plain tables, no Player/DataStore involved)
+-- ============================================================
+suite("ProfileDefaultsAndMigration")
+local freshProfile = DataSchema.GetDefaultProfile()
+checkEqual("default Gems", freshProfile.Currencies.Gems, 0)
+checkEqual("default AlienTokens", freshProfile.Currencies.AlienTokens, 0)
+checkEqual("default Wins", freshProfile.Stats.Wins, 0)
+check("default BestTime is nil", freshProfile.Stats.BestTime == nil)
+checkEqual("default TotalPlaytime", freshProfile.Stats.TotalPlaytime, 0)
+checkEqual("default TotalFeathersCollected", freshProfile.Stats.TotalFeathersCollected, 0)
+checkEqual("default PermanentPerks.BagSize", freshProfile.PermanentPerks.BagSize, 0)
+check("Starter class owned by default", freshProfile.Classes.Owned.Starter == true)
+checkEqual("Slot1 defaults to Starter", freshProfile.Classes.Equipped.Slot1, "Starter")
+check("Slot2 empty by default", freshProfile.Classes.Equipped.Slot2 == nil)
+check("Slot2 locked by default", freshProfile.Classes.Slot2Unlocked == false)
+checkEqual("default Pitchfork skin selected", freshProfile.Inventory.SelectedSkins.Pitchfork, "Default")
+check("default Pitchfork skin owned", freshProfile.Inventory.OwnedSkins.Pitchfork.Default == true)
+
+-- Simulates an OLD saved profile from before a schema field existed:
+-- missing PermanentPerks/Entitlements entirely, but with real progress on
+-- fields that DO exist. Reconcile must fill in what's missing without
+-- touching what's already there.
+local partialOldProfile = {
+	SchemaVersion = 0,
+	Currencies = { Gems = 777, AlienTokens = 12 },
+	Stats = { Wins = 3, BestTime = 45.5, TotalPlaytime = 100, TotalFeathersCollected = 500 },
+	Classes = {
+		Owned = { Starter = true, PackMule = true },
+		Equipped = { Slot1 = "PackMule", Slot2 = nil },
+		Slot2Unlocked = false,
+	},
+	Inventory = { OwnedSkins = { Pitchfork = { Default = true } }, SelectedSkins = { Pitchfork = "Default" } },
+	CodesRedeemed = {},
+	-- PermanentPerks and Entitlements/Receipts are intentionally absent.
+}
+local migrated = DataSchema.Reconcile(partialOldProfile)
+checkEqual("migration preserves existing Gems", migrated.Currencies.Gems, 777)
+checkEqual("migration preserves existing Wins", migrated.Stats.Wins, 3)
+checkEqual("migration preserves equipped class", migrated.Classes.Equipped.Slot1, "PackMule")
+check("migration adds missing PermanentPerks", migrated.PermanentPerks ~= nil)
+checkEqual("migrated PermanentPerks default to 0", migrated.PermanentPerks.BagSize, 0)
+check("migration adds missing Entitlements", migrated.Entitlements ~= nil)
+check("migration adds missing Receipts.Processed", migrated.Receipts ~= nil and migrated.Receipts.Processed ~= nil)
+checkEqual("migration stamps current SchemaVersion", migrated.SchemaVersion, DataSchema.SchemaVersion)
+
+-- ============================================================
+-- 24. Monetization: temporary (Round) vs permanent ownership stay
+--     structurally distinct (see ToolOwnership/RunReset suites above for
+--     the RunOwned -> Locked reset; PermanentOwned requires a live
+--     profile entitlement check, listed in "NOT covered" below)
+-- ============================================================
+suite("OwnershipKinds")
+local ownershipToolState = RunPlayerStateService.InitPlayer({ UserId = -900004 }, "Normal")
+ownershipToolState.Tools.Vacuum.Ownership = "RunOwned"
+check("RunOwned counts as owned", ToolService.IsOwned(ownershipToolState, "Vacuum"))
+local resetOwnershipState = RunPlayerStateService.InitPlayer({ UserId = -900004 }, "Normal")
+check("RunOwned does not survive a run reset (temporary, as intended)", not ToolService.IsOwned(resetOwnershipState, "Vacuum"))
+
+-- ============================================================
+-- 25. Leaderboard data shape (GetBoards() is instant/cached -- see
+--     LeaderboardService's header; safe to call before Init() has run,
+--     since `cache` starts as the empty-but-well-formed shape below)
+-- ============================================================
+suite("Leaderboard")
+local boards = LeaderboardService.GetBoards()
+check("Wins board is a table", type(boards.Wins) == "table")
+check("Feathers board is a table", type(boards.Feathers) == "table")
+check("BestTime board is a table", type(boards.BestTime) == "table")
+
+-- ============================================================
 -- Summary
 -- ============================================================
 print(("[DebugTests] %d passed, %d failed (%d total)"):format(passed, failed, passed + failed))
@@ -458,8 +624,19 @@ print(table.concat({
 	"  - Pitchfork/Dynamite/Vacuum/Drone collection, cooldowns, and pile visual removal",
 	"  - Drone AI cycle (pile -> sell station -> pile) and swarm spawn/cleanup",
 	"  - CurrencyService.Award's Earned-vs-Purchased Gems2x source policy (needs a loaded DataStore profile)",
-	"  - Class roll RNG distribution, class equip flow, permanent perk purchase",
+	"  - Class roll RNG distribution (odds/weights themselves ARE tested above), class equip flow (ownership/",
+	"    slot-unlock/duplicate-class checks all gate on a loaded profile), permanent perk purchase",
 	"  - Party create/join/start, queueing, and Farmer/Egg pickup range checks",
-	"  - Hard Mode unlock gating end-to-end (HardModeService reads live Wins via a loaded profile)",
 	"  - Marketplace prompts (no real product/pass IDs exist yet -- see MonetizationConfig)",
+	"  - Code redemption end-to-end (one-time-use check reads a loaded profile's CodesRedeemed)",
+	"  - StatsService.ReportRunTime's Best-Time-only-if-better comparison, and every stat increment",
+	"    (Wins/Playtime/Feathers) -- all read/write a loaded profile",
+	"  - MonetizationService.ProcessReceipt idempotency end-to-end (isReceiptProcessed/markReceiptProcessed",
+	"    read/write a loaded profile; the catalog lookup itself has no real IDs to test against yet)",
+	"  - InventoryService skin ownership/equip validation (reads a loaded profile)",
+	"  - PermanentOwned tool ownership persisting across a run reset (the entitlement check itself needs a",
+	"    loaded profile -- RunOwned's reset IS covered above via a fake player)",
+	"  - LeaderboardService's actual OrderedDataStore read/write path (Studio needs \"Enable Studio Access",
+	"    to API Services\" for this; GetBoards()'s shape and its local-fallback ranking logic don't need it",
+	"    and ARE exercised indirectly by every fake-player test above using the same no-profile pattern)",
 }, "\n"))

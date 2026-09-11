@@ -65,7 +65,13 @@ local function renderChapterSelection()
 		local card = Theme.newPanel(chapter.Id, host)
 		card.Size = UDim2.new(0, 220, 1, 0)
 
-		local chapterLocked = chapter.Locked and (PlayerState.Profile.TotalWins or 0) < (chapter.RequiresWins or 0)
+		-- chapter.Locked is a permanent "not released yet" flag (only
+		-- Chapter2 sets it, alongside Enabled = false server-side and no
+		-- Difficulties table) -- entirely separate from the per-difficulty
+		-- Wins gating below. Previously this ANDed in a Wins comparison, so
+		-- Chapter2 would stop showing LOCKED (and look selectable, with
+		-- nothing to actually select) the moment a player earned 1 Win.
+		local chapterLocked = chapter.Locked == true
 
 		Theme.newLabel({
 			Text = chapter.Name .. "\n" .. chapter.Subtitle,
@@ -76,7 +82,7 @@ local function renderChapterSelection()
 
 		if chapterLocked then
 			Theme.newLabel({
-				Text = ("LOCKED (%d Win Required)"):format(chapter.RequiresWins or 1),
+				Text = "COMING SOON",
 				Size = UDim2.new(1, 0, 0, 30),
 				Position = UDim2.new(0, 0, 1, -34),
 				TextColor = Theme.Colors.Locked,

@@ -37,6 +37,18 @@ local function statRow(parent: Instance, order: number, label: string, value: st
 	})
 end
 
+local function buildStatRows(body: Instance)
+	local player = Players.LocalPlayer
+	local profile = PlayerState.Profile
+
+	statRow(body, 1, "USERNAME", player.Name)
+	statRow(body, 2, "CLASS", profile.EquippedClass or "Starter")
+	statRow(body, 3, "TOTAL PLAYTIME", Format.time(profile.TotalPlaytime or 0))
+	statRow(body, 4, "TIME RECORD", profile.TimeRecord and Format.time(profile.TimeRecord) or "--:--")
+	statRow(body, 5, "TOTAL WINS", tostring(profile.TotalWins or 0))
+	statRow(body, 6, "FEATHERS COLLECTED", Format.compactNumber(profile.FeathersCollected or 0))
+end
+
 function StatsController.open()
 	local overlay = Overlay.new("STATS")
 	overlay.CloseButton.Activated:Connect(function()
@@ -54,17 +66,24 @@ function StatsController.open()
 	padding.PaddingTop = UDim.new(0, 16)
 	padding.Parent = overlay.Body
 
-	local player = Players.LocalPlayer
-	local profile = PlayerState.Profile
+	buildStatRows(overlay.Body)
 
-	statRow(overlay.Body, 1, "USERNAME", player.Name)
-	statRow(overlay.Body, 2, "CLASS", profile.EquippedClass or "Starter")
-	statRow(overlay.Body, 3, "TOTAL PLAYTIME", Format.time(profile.TotalPlaytime or 0))
-	statRow(overlay.Body, 4, "TIME RECORD", profile.TimeRecord and Format.time(profile.TimeRecord) or "--:--")
-	statRow(overlay.Body, 5, "TOTAL WINS", tostring(profile.TotalWins or 0))
-	statRow(overlay.Body, 6, "FEATHERS COLLECTED", Format.compactNumber(profile.FeathersCollected or 0))
+	-- Every value here comes from PlayerState.Profile (Core_ProfileUpdated)
+	-- -- rebuild in place if it changes while this overlay happens to be
+	-- open (e.g. a run completion landing Wins/BestTime/Feathers) instead
+	-- of only showing them stale until next open.
+	local profileConnection = PlayerState.ProfileChanged:Connect(function()
+		for _, child in ipairs(overlay.Body:GetChildren()) do
+			if not (child:IsA("UILayout") or child:IsA("UIPadding")) then
+				child:Destroy()
+			end
+		end
+		buildStatRows(overlay.Body)
+	end)
 
-	UIController.openOverlay("Stats", overlay.Frame)
+	UIController.openOverlay("Stats", overlay.Frame, function()
+		profileConnection:Disconnect()
+	end)
 end
 
 function StatsController.init(ui)
