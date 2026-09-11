@@ -140,7 +140,7 @@ function InventoryController.open()
 	end)
 
 	UIController.openOverlay("Inventory", overlay.Frame, function()
-		profileConnection:Disconnect()
+		profileConnection()
 	end)
 end
 

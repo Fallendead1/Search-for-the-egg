@@ -216,7 +216,7 @@ function ChestController.open()
 	local profileConnection = PlayerState.ProfileChanged:Connect(refreshOpenButtonState)
 
 	UIController.openOverlay("AlienChest", overlay.Frame, function()
-		profileConnection:Disconnect()
+		profileConnection()
 		revealHost = nil
 		openButton = nil
 		opening = false

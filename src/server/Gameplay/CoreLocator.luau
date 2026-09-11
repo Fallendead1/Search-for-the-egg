@@ -74,7 +74,7 @@ function CoreLocator.GetMonetizationService()
 end
 
 function CoreLocator.GetWins(player: Player): number
-	return CoreLocator.GetMetaProgressionService():GetWins(player)
+	return CoreLocator.GetMetaProgressionService().GetWins(player)
 end
 
 return CoreLocator

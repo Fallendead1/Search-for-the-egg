@@ -82,7 +82,7 @@ function StatsController.open()
 	end)
 
 	UIController.openOverlay("Stats", overlay.Frame, function()
-		profileConnection:Disconnect()
+		profileConnection()
 	end)
 end
 

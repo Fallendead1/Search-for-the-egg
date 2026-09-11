@@ -58,6 +58,9 @@ function RemoteBootstrap.Init()
 end
 
 function RemoteBootstrap.Get(name: string): RemoteEvent?
+	if not initialized then
+		RemoteBootstrap.Init()
+	end
 	return remotes[name]
 end
 

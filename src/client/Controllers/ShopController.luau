@@ -345,8 +345,8 @@ function ShopController.open(defaultTab: string?)
 	end)
 
 	UIController.openOverlay("Shop", overlay.Frame, function()
-		runConnection:Disconnect()
-		profileConnection:Disconnect()
+		runConnection()
+		profileConnection()
 	end)
 end
 

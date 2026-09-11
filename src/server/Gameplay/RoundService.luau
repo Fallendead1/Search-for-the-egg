@@ -384,7 +384,7 @@ function RoundService.FinalizeCompletion(run: any, winningUserId: number)
 		if player then
 			local state = RunPlayerStateService.Get(player)
 			local ok, result = pcall(function()
-				return metaProgression:AwardRunCompletion(player, {
+				return metaProgression.AwardRunCompletion(player, {
 					ChapterId = run.ChapterId,
 					Difficulty = run.Difficulty,
 					ElapsedSeconds = elapsedSeconds,

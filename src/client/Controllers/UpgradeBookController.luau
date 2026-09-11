@@ -405,8 +405,8 @@ function UpgradeBookController.open()
 	local profileConnection = PlayerState.ProfileChanged:Connect(refreshAllPages)
 
 	UIController.openOverlay("Book", overlay.Frame, function()
-		runConnection:Disconnect()
-		profileConnection:Disconnect()
+		runConnection()
+		profileConnection()
 		pageFrames = {}
 		tabButtons = {}
 	end)

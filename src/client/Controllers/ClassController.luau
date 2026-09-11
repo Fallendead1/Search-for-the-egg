@@ -433,7 +433,7 @@ function ClassController.open()
 
 	UIController.openOverlay("Classes", overlay.Frame, function()
 		stopAutoRoll()
-		profileConnection:Disconnect()
+		profileConnection()
 		spinButton = nil
 		autoRollButton = nil
 		resultLabel = nil

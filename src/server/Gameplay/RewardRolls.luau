@@ -47,14 +47,14 @@ function RewardRolls.AwardRareFinds(player: Player, diamondHits: number, alienTo
 
 	for _ = 1, diamondHits do
 		local amount = math.random(RunConfig.DIAMOND.GEM_REWARD_MIN, RunConfig.DIAMOND.GEM_REWARD_MAX)
-		currency:Award(player, "Gems", amount, "PileDiamond", currency.Source.Earned)
+		currency.Award(player, "Gems", amount, "PileDiamond", currency.Source.Earned)
 	end
 	if diamondHits > 0 then
 		RoundService.SendNotification(player, "You found a Diamond in the pile!", "Success")
 	end
 
 	for _ = 1, alienTokenHits do
-		currency:Award(player, "AlienTokens", RunConfig.ALIEN_TOKEN_DROP.REWARD_AMOUNT, "PileAlienToken", currency.Source.Earned)
+		currency.Award(player, "AlienTokens", RunConfig.ALIEN_TOKEN_DROP.REWARD_AMOUNT, "PileAlienToken", currency.Source.Earned)
 	end
 	if alienTokenHits > 0 then
 		RoundService.SendNotification(player, "You found an Alien Token!", "Success")

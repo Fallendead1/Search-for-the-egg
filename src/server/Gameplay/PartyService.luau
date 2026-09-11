@@ -124,8 +124,12 @@ end
 -- (a no-op if they're actually disconnecting rather than voluntarily
 -- leaving).
 local function notifyLeft(player: Player)
+	local realPlayer = Players:GetPlayerByUserId(player.UserId)
+	if not realPlayer then
+		return
+	end
 	local remote = RemotesLocator.Get("Gameplay_PartyState")
-	remote:FireClient(player, {
+	remote:FireClient(realPlayer, {
 		InParty = false,
 		PartyId = nil,
 		OwnerUserId = nil,

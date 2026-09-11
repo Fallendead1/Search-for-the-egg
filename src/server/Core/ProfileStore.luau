@@ -8,11 +8,20 @@
 
 local DataStoreService = game:GetService("DataStoreService")
 local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
 
 local ProfileStore = {}
 ProfileStore.__index = ProfileStore
 
-local SESSION_LOCK_STALE_SECONDS = 30
+-- Studio has no stable game.JobId (a fresh random one is generated below on
+-- every single Play session), so a session this same machine held can never
+-- be recognized as "ours" and reclaimed early the way a live server restart
+-- can be -- without a shorter timeout here, every Play session started within
+-- SESSION_LOCK_STALE_SECONDS of the previous one's end would find the lock
+-- still (spuriously) held and kick the tester. Production servers keep the
+-- full timeout, which is load-bearing there: it's what stops two real
+-- concurrent servers from corrupting the same profile.
+local SESSION_LOCK_STALE_SECONDS = RunService:IsStudio() and 3 or 30
 local SESSION_CLAIM_RETRY_COUNT = 5
 local SESSION_CLAIM_RETRY_WAIT_SECONDS = 3
 

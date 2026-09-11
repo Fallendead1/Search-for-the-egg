@@ -33,7 +33,7 @@ end
 function RunPlayerStateService.InitPlayer(player: Player, difficultyId: string)
 	local metaProgression = CoreLocator.GetMetaProgressionService()
 	local monetization = CoreLocator.GetMonetizationService()
-	local modifiers = metaProgression:GetGameplayModifiers(player) or {}
+	local modifiers = metaProgression.GetGameplayModifiers(player) or {}
 
 	local state = {
 		UserId = player.UserId,
@@ -59,7 +59,7 @@ function RunPlayerStateService.InitPlayer(player: Player, difficultyId: string)
 
 		local entitlementKey = RunConfig.ENTITLEMENTS[toolName .. "Permanent"]
 		local ok, owned = pcall(function()
-			return entitlementKey and monetization:OwnsEntitlement(player, entitlementKey)
+			return entitlementKey and monetization.OwnsEntitlement(player, entitlementKey)
 		end)
 		if ok and owned then
 			state.Tools[toolName].Ownership = "PermanentOwned"

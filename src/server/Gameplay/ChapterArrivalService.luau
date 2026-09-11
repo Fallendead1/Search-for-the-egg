@@ -48,7 +48,8 @@ function ChapterArrivalService.IsValidTeleportData(data: any): boolean
 	if type(data.PartyId) ~= "string" or data.PartyId == "" then
 		return false
 	end
-	if type(data.ChapterId) ~= "string" or not RunConfig.CHAPTERS[data.ChapterId] then
+	local chapter = type(data.ChapterId) == "string" and RunConfig.CHAPTERS[data.ChapterId]
+	if not chapter or not chapter.Enabled then
 		return false
 	end
 	if type(data.Difficulty) ~= "string" or not RunConfig.DIFFICULTY[data.Difficulty] then

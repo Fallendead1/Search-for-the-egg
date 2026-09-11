@@ -180,7 +180,7 @@ function ToolService.BuyDroneWithGems(player: Player)
 	end
 
 	local currency = CoreLocator.GetCurrencyService()
-	local spent = currency:TrySpend(player, "Gems", DroneConfig.ONE_ROUND_GEM_COST, "RunDrone")
+	local spent = currency.TrySpend(player, "Gems", DroneConfig.ONE_ROUND_GEM_COST, "RunDrone")
 	if not spent then
 		RoundService.SendNotification(player, DRONE_GEMS_FAILURE_MESSAGES.InsufficientGems, "Error")
 		return false, "InsufficientGems"
@@ -238,7 +238,7 @@ function ToolService.Init()
 	local monetization = CoreLocator.GetMonetizationService()
 	for toolName, productKey in pairs(RunConfig.ONE_ROUND_PRODUCT_KEYS) do
 		local ok, err = pcall(function()
-			monetization:RegisterRunProductGrant(productKey, handleRunProductGrant(toolName))
+			monetization.RegisterRunProductGrant(productKey, handleRunProductGrant(toolName))
 		end)
 		if not ok then
 			warn(("[Gameplay] Failed to register run product grant '%s': %s"):format(productKey, tostring(err)))
