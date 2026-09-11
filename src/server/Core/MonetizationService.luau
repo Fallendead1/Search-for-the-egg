@@ -30,19 +30,22 @@ for key, product in MonetizationConfig.DeveloperProducts do
 	end
 end
 
+-- Reverse lookup: EntitlementKey -> Game Pass Id. Every entry in
+-- MonetizationConfig.GamePasses grants its entitlement purely through live
+-- ownership (see OwnsEntitlement below) -- Game Passes are never receipted,
+-- so there is no ProcessReceipt path that could ever grant these.
+local passIdByEntitlementKey: { [string]: number } = {}
+for _, pass in MonetizationConfig.GamePasses do
+	if pass.EntitlementKey and pass.Id and pass.Id ~= 0 then
+		passIdByEntitlementKey[pass.EntitlementKey] = pass.Id
+	end
+end
+
 local passOwnershipCache = {} :: { [Player]: { [number]: { owns: boolean, checkedAt: number } } }
 local PASS_CACHE_TTL_SECONDS = 300
 
 function MonetizationService.RegisterRunProductGrant(productKey: string, callback: (Player) -> ())
 	runProductCallbacks[productKey] = callback
-end
-
-function MonetizationService.OwnsEntitlement(player: Player, entitlementKey: string): boolean
-	local profile = DataService.GetProfile(player)
-	if not profile then
-		return false
-	end
-	return profile.Entitlements[entitlementKey] == true
 end
 
 local function grantEntitlement(player: Player, entitlementKey: string)
@@ -51,7 +54,57 @@ local function grantEntitlement(player: Player, entitlementKey: string)
 		return false
 	end
 	profile.Entitlements[entitlementKey] = true
+	if entitlementKey == "ExtraClassSlot" then
+		local ClassService = require(script.Parent.ClassService)
+		ClassService.UnlockSlot2(player)
+	end
 	return true
+end
+
+-- Server-authoritative entitlement check. Every current entitlement is
+-- backed by a Game Pass (see MonetizationConfig.GamePasses), so this
+-- resolves live ownership via Marketplace (cached by OwnsGamePass) and
+-- caches the result on the profile so the client-visible
+-- EntitlementSummary (Core_ProfileUpdated) stays in sync without an extra
+-- Marketplace round trip on every check. The stored-flag fast path also
+-- keeps this correct for any future receipt-granted entitlement.
+function MonetizationService.OwnsEntitlement(player: Player, entitlementKey: string): boolean
+	local profile = DataService.GetProfile(player)
+	if not profile then
+		return false
+	end
+	if profile.Entitlements[entitlementKey] == true then
+		return true
+	end
+
+	local passId = passIdByEntitlementKey[entitlementKey]
+	if not passId then
+		return false
+	end
+
+	if MonetizationService.OwnsGamePass(player, passId) then
+		grantEntitlement(player, entitlementKey)
+		return true
+	end
+	return false
+end
+
+-- Proactively resolves every Game-Pass-backed entitlement once per profile
+-- load, so a returning owner's perks (permanent tools, 2x Gems, Slot 2,
+-- etc.) apply immediately instead of waiting on whatever gameplay code
+-- happens to call OwnsEntitlement first.
+function MonetizationService.SyncGamePassEntitlements(player: Player)
+	local changed = false
+	for _, pass in MonetizationConfig.GamePasses do
+		if pass.EntitlementKey and pass.Id and pass.Id ~= 0 then
+			if MonetizationService.OwnsEntitlement(player, pass.EntitlementKey) then
+				changed = true
+			end
+		end
+	end
+	if changed then
+		DataService.PushProfileUpdated(player)
+	end
 end
 
 -- Checks (and caches) game pass ownership. Returns cached/false on lookup
@@ -93,11 +146,11 @@ local function processProduct(player: Player, key: string, config, purchaseId: s
 	if config.Kind == "Gems" then
 		CurrencyService.Award(player, "Gems", config.Amount, "Purchase:" .. key, CurrencyService.Source.Purchased)
 	elseif config.Kind == "Entitlement" then
+		-- No current Developer Product uses this Kind -- every permanent
+		-- unlock in the approved catalog is a Game Pass, resolved live via
+		-- OwnsEntitlement instead of a receipt. Kept for any future
+		-- receipt-granted entitlement product.
 		grantEntitlement(player, config.EntitlementKey)
-		if config.EntitlementKey == "ExtraClassSlot" then
-			local ClassService = require(script.Parent.ClassService)
-			ClassService.UnlockSlot2(player)
-		end
 	elseif config.Kind == "RunProduct" then
 		local callback = runProductCallbacks[config.ProductKey]
 		if callback then
@@ -165,6 +218,9 @@ end
 
 function MonetizationService.Init()
 	MarketplaceService.ProcessReceipt = MonetizationService.ProcessReceipt
+	DataService.ProfileLoaded:Connect(function(player)
+		task.spawn(MonetizationService.SyncGamePassEntitlements, player)
+	end)
 end
 
 Players.PlayerRemoving:Connect(function(player)

@@ -153,8 +153,8 @@ local function buildPurchaseGate(body: Instance, toolId: string, cashCostCents: 
 	end
 
 	if permanentKey then
-		-- Permanent tool unlocks are one-time Developer Products (Kind =
-		-- "Entitlement" in MonetizationConfig), not Game Passes.
+		-- Permanent tool unlocks are Game Passes (see MonetizationConfig.GamePasses),
+		-- resolved server-side via MonetizationService.OwnsEntitlement.
 		local permanentRobux = DisplayConfig[toolId] and DisplayConfig[toolId].PermanentRobux
 		local permanentButton = Theme.newButton({
 			Text = permanentRobux and ("PERMANENT - %d R$"):format(permanentRobux) or "PERMANENT",
@@ -162,10 +162,10 @@ local function buildPurchaseGate(body: Instance, toolId: string, cashCostCents: 
 			Color = Theme.Colors.TextGold,
 			Parent = buttonRow,
 		})
-		local hasPermanentProduct = MonetizationController.hasProduct(permanentKey)
-		Theme.setButtonEnabled(permanentButton, hasPermanentProduct)
+		local hasPermanentPass = MonetizationController.hasGamePass(permanentKey)
+		Theme.setButtonEnabled(permanentButton, hasPermanentPass)
 		permanentButton.Activated:Connect(function()
-			MonetizationController.promptProduct(permanentKey)
+			MonetizationController.promptGamePass(permanentKey)
 		end)
 	end
 end
@@ -241,7 +241,7 @@ end
 
 local function buildVacuumPage(body: Instance)
 	if not PlayerState.isToolOwned("Vacuum") then
-		buildPurchaseGate(body, "Vacuum", nil, "VacuumRound", nil, "Auto-collect feathers while heat allows.")
+		buildPurchaseGate(body, "Vacuum", nil, "VacuumRound", "VacuumPermanent", "Auto-collect feathers while heat allows.")
 		return
 	end
 

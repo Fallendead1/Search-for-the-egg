@@ -5,7 +5,7 @@ local VacuumConfig = {}
 -- otherwise.
 VacuumConfig.UNLOCK_COST_CENTS = nil -- TUNING_REQUIRED (Robux-only unlock assumed)
 VacuumConfig.ONE_ROUND_ROBUX = 40
-VacuumConfig.PERMANENT_ROBUX = 200 -- TUNING_REQUIRED, not specified in design doc
+VacuumConfig.PERMANENT_ROBUX = 160
 
 VacuumConfig.MAX_LEVEL = 5
 

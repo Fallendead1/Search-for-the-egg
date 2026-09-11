@@ -286,9 +286,9 @@ DisplayConfig.PermanentPerkMaxLevel = (PermanentPerksConfig and PermanentPerksCo
 
 DisplayConfig.GemPacks = {
 	{ Id = "Gems100", Gems = 100, Robux = 24 },
-	{ Id = "Gems400", Gems = 400, Robux = 56 },
+	{ Id = "Gems400", Gems = 400, Robux = 72 },
 }
-DisplayConfig.DoubleGemsRobux = 64
+DisplayConfig.DoubleGemsRobux = 160
 
 -- ============================================================
 -- CLASSES

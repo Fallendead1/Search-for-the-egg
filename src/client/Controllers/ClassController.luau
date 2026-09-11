@@ -124,7 +124,7 @@ local function runAutoRollLoop(generation: number)
 			break
 		end
 
-		local delay = MonetizationController.ownsEntitlement("FastRolls") and 0.5 or 1.5
+		local delay = MonetizationController.ownsGamePass("FastRolls") and 0.5 or 1.5
 		task.wait(delay)
 	end
 end
@@ -258,8 +258,7 @@ local function buildSlots(parent: Instance)
 			Parent = slot2,
 		})
 		unlockButton.Activated:Connect(function()
-			-- ExtraClassSlot is a one-time Developer Product (Kind = "Entitlement"), not a Game Pass.
-			MonetizationController.promptProduct("ExtraClassSlot")
+			MonetizationController.promptGamePass("ExtraClassSlot")
 		end)
 	end
 end
@@ -296,9 +295,7 @@ local function buildMonetizationRow(parent: Instance)
 		Parent = row,
 	})
 	fastRolls.Activated:Connect(function()
-		-- FastRolls/ClassLuck2x are one-time Developer Products (Kind =
-		-- "Entitlement"), not Game Passes.
-		MonetizationController.promptProduct("FastRolls")
+		MonetizationController.promptGamePass("FastRolls")
 	end)
 
 	local doubleLuck = Theme.newButton({
@@ -307,7 +304,7 @@ local function buildMonetizationRow(parent: Instance)
 		Parent = row,
 	})
 	doubleLuck.Activated:Connect(function()
-		MonetizationController.promptProduct("ClassLuck2x")
+		MonetizationController.promptGamePass("ClassLuck2x")
 	end)
 end
 

@@ -1,52 +1,55 @@
--- Monetization catalog. NO real Roblox asset IDs are known yet -- every Id
--- below is a placeholder (0) and MUST be filled in with real Developer
--- Product / Game Pass IDs (created on roblox.com) before MonetizationService
--- can process real receipts. Robux prices are copied from the GDD for
--- reference/documentation only; the authoritative price is whatever is
--- configured on the product/pass itself.
+-- Monetization catalog. Every Id below is the real Roblox Developer
+-- Product / Game Pass ID (created via Open Cloud). Robux prices mirror
+-- what's actually configured on the product/pass itself, kept here for
+-- reference/documentation -- the authoritative price is whatever Roblox
+-- has on file for the Id.
 
 local MonetizationConfig = {}
 
 -- Kind = "Gems"           -> awards Amount Gems directly (CurrencyService.Award)
--- Kind = "Entitlement"    -> grants a permanent Entitlements[EntitlementKey] = true
 -- Kind = "RunProduct"     -> invokes the callback registered via
 --                            MonetizationService.RegisterRunProductGrant(ProductKey, ...)
---                            (the Gameplay agent owns granting the actual run effect)
+--                            (the Gameplay agent owns granting the actual run effect).
+--                            ProductKey must match a RunConfig.ONE_ROUND_PRODUCT_KEYS
+--                            value -- that's what ToolService.Init() actually registers.
 -- Kind = "ChestMultiOpen" -> opens ChestCount Alien Chests at no Token cost
+--
+-- Permanent tool/perk unlocks are NOT Developer Products -- Roblox never
+-- sends a receipt for a Game Pass purchase, so a permanent unlock can only
+-- ever be resolved by checking live Game Pass ownership (see GamePasses
+-- below and MonetizationService.OwnsEntitlement).
 MonetizationConfig.DeveloperProducts = {
-	Gems100 = { Id = 0, RobuxPrice = 24, Kind = "Gems", Amount = 100 },
-	Gems400 = { Id = 0, RobuxPrice = 56, Kind = "Gems", Amount = 400 },
+	Gems100 = { Id = 3712387142, RobuxPrice = 24, Kind = "Gems", Amount = 100 },
+	Gems400 = { Id = 3712387144, RobuxPrice = 72, Kind = "Gems", Amount = 400 },
 
-	FastRolls = { Id = 0, RobuxPrice = 144, Kind = "Entitlement", EntitlementKey = "FastRolls" },
-	ClassLuck2x = { Id = 0, RobuxPrice = 160, Kind = "Entitlement", EntitlementKey = "ClassLuck2x" },
-	ExtraClassSlot = { Id = 0, RobuxPrice = 96, Kind = "Entitlement", EntitlementKey = "ExtraClassSlot" },
+	PitchforkRound = { Id = 3712387131, RobuxPrice = 16, Kind = "RunProduct", ProductKey = "PitchforkOneRound" },
+	DynamiteRound = { Id = 3712387134, RobuxPrice = 24, Kind = "RunProduct", ProductKey = "DynamiteOneRound" },
+	VacuumRound = { Id = 3712387136, RobuxPrice = 40, Kind = "RunProduct", ProductKey = "VacuumOneRound" },
+	DroneRound = { Id = 3712387138, RobuxPrice = 16, Kind = "RunProduct", ProductKey = "DroneOneRound" },
 
-	InfiniteBagRound = { Id = 0, RobuxPrice = 16, Kind = "RunProduct", ProductKey = "InfiniteBagRound" },
-	-- Permanent Infinite Bag. Reuses InfiniteBagRound's existing GDD Robux
-	-- price (16) rather than inventing a new one -- the authoritative price
-	-- is whatever is configured on the product itself once Id is filled in.
-	InfiniteBagPermanent = { Id = 0, RobuxPrice = 16, Kind = "Entitlement", EntitlementKey = "InfiniteBag" },
-
-	PitchforkRound = { Id = 0, RobuxPrice = 16, Kind = "RunProduct", ProductKey = "PitchforkRound" },
-	PitchforkPermanent = { Id = 0, RobuxPrice = 80, Kind = "Entitlement", EntitlementKey = "PitchforkPermanent" },
-
-	DynamiteRound = { Id = 0, RobuxPrice = 24, Kind = "RunProduct", ProductKey = "DynamiteRound" },
-	DynamitePermanent = { Id = 0, RobuxPrice = 120, Kind = "Entitlement", EntitlementKey = "DynamitePermanent" },
-
-	VacuumRound = { Id = 0, RobuxPrice = 40, Kind = "RunProduct", ProductKey = "VacuumRound" },
-	-- Price not specified in the GDD; left nil until supplied.
-	VacuumPermanent = { Id = 0, RobuxPrice = nil, Kind = "Entitlement", EntitlementKey = "VacuumPermanent" },
-
-	DroneRound = { Id = 0, RobuxPrice = 16, Kind = "RunProduct", ProductKey = "DroneRound" },
-	DronePermanent = { Id = 0, RobuxPrice = 104, Kind = "Entitlement", EntitlementKey = "DronePermanent" },
-
-	AlienChest3 = { Id = 0, RobuxPrice = 72, Kind = "ChestMultiOpen", ChestCount = 3 },
-	AlienChest5 = { Id = 0, RobuxPrice = 104, Kind = "ChestMultiOpen", ChestCount = 5 },
-	AlienChest10 = { Id = 0, RobuxPrice = 184, Kind = "ChestMultiOpen", ChestCount = 10 },
+	AlienChest3 = { Id = 3712387145, RobuxPrice = 72, Kind = "ChestMultiOpen", ChestCount = 3 },
+	AlienChest5 = { Id = 3712387148, RobuxPrice = 104, Kind = "ChestMultiOpen", ChestCount = 5 },
+	AlienChest10 = { Id = 3712387151, RobuxPrice = 184, Kind = "ChestMultiOpen", ChestCount = 10 },
 }
 
+-- Permanent, one-time ownership purchases. Never processed via
+-- ProcessReceipt -- ownership is resolved live via
+-- MarketplaceService:UserOwnsGamePassAsync (see
+-- MonetizationService.OwnsGamePass / OwnsEntitlement). EntitlementKey is
+-- the key every other system (RunConfig.ENTITLEMENTS, ToolService,
+-- RunPlayerStateService, MetaProgressionService, client
+-- MonetizationController.ownsEntitlement) already reads/writes -- unchanged
+-- by this catalog mapping.
 MonetizationConfig.GamePasses = {
-	Gems2xPermanent = { Id = 0, RobuxPrice = 64, EntitlementKey = "Gems2xPermanent" },
+	InfiniteBagPermanent = { Id = 1978778684, RobuxPrice = 16, EntitlementKey = "InfiniteBag" },
+	PitchforkPermanent = { Id = 1978832709, RobuxPrice = 80, EntitlementKey = "PitchforkPermanent" },
+	DynamitePermanent = { Id = 1979624607, RobuxPrice = 120, EntitlementKey = "DynamitePermanent" },
+	VacuumPermanent = { Id = 1978760699, RobuxPrice = 160, EntitlementKey = "VacuumPermanent" },
+	DronePermanent = { Id = 1979624608, RobuxPrice = 104, EntitlementKey = "DronePermanent" },
+	Gems2xPermanent = { Id = 1977380893, RobuxPrice = 160, EntitlementKey = "Gems2xPermanent" },
+	ClassLuck2x = { Id = 1979546654, RobuxPrice = 160, EntitlementKey = "ClassLuck2x" },
+	FastRolls = { Id = 1980020399, RobuxPrice = 144, EntitlementKey = "FastRolls" },
+	ExtraClassSlot = { Id = 1976402936, RobuxPrice = 96, EntitlementKey = "ExtraClassSlot" },
 }
 
 -- Gem-alternative price for a Drone round, per GDD ("40 Gems alternative").

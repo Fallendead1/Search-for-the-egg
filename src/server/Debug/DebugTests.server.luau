@@ -317,9 +317,60 @@ for key, product in pairs(MonetizationConfig.DeveloperProducts) do
 	end
 end
 checkEqual("every Developer Product has Id/Kind fields", invalidProductCount, 0)
-check("Infinite Bag permanent entitlement configured", MonetizationConfig.DeveloperProducts.InfiniteBagPermanent ~= nil)
-checkEqual("Infinite Bag entitlement key", MonetizationConfig.DeveloperProducts.InfiniteBagPermanent.EntitlementKey, "InfiniteBag")
+checkEqual("Developer Product catalog has exactly 9 entries", (function()
+	local count = 0
+	for _ in pairs(MonetizationConfig.DeveloperProducts) do
+		count += 1
+	end
+	return count
+end)(), 9)
+
+local invalidPassCount = 0
+for key, pass in pairs(MonetizationConfig.GamePasses) do
+	if type(pass.Id) ~= "number" or type(pass.EntitlementKey) ~= "string" then
+		invalidPassCount += 1
+		warn(("[DebugTests] Malformed GamePasses entry: %s"):format(key))
+	end
+end
+checkEqual("every Game Pass has Id/EntitlementKey fields", invalidPassCount, 0)
+checkEqual("Game Pass catalog has exactly 9 entries", (function()
+	local count = 0
+	for _ in pairs(MonetizationConfig.GamePasses) do
+		count += 1
+	end
+	return count
+end)(), 9)
+
+-- Permanent tool/perk unlocks are Game Passes (never receipted -- Roblox
+-- never sends a ProcessReceipt for a Game Pass), not Developer Products.
+check("Infinite Bag is a Game Pass, not a Developer Product", MonetizationConfig.GamePasses.InfiniteBagPermanent ~= nil)
+checkEqual("Infinite Bag entitlement key", MonetizationConfig.GamePasses.InfiniteBagPermanent.EntitlementKey, "InfiniteBag")
 check("Gems2x is a Game Pass, not a Developer Product", MonetizationConfig.GamePasses.Gems2xPermanent ~= nil)
+check("PitchforkPermanent is a Game Pass, not a Developer Product", MonetizationConfig.GamePasses.PitchforkPermanent ~= nil)
+check("DynamitePermanent is a Game Pass, not a Developer Product", MonetizationConfig.GamePasses.DynamitePermanent ~= nil)
+check("VacuumPermanent is a Game Pass, not a Developer Product", MonetizationConfig.GamePasses.VacuumPermanent ~= nil)
+check("DronePermanent is a Game Pass, not a Developer Product", MonetizationConfig.GamePasses.DronePermanent ~= nil)
+check("FastRolls is a Game Pass, not a Developer Product", MonetizationConfig.GamePasses.FastRolls ~= nil)
+check("ClassLuck2x is a Game Pass, not a Developer Product", MonetizationConfig.GamePasses.ClassLuck2x ~= nil)
+check("ExtraClassSlot is a Game Pass, not a Developer Product", MonetizationConfig.GamePasses.ExtraClassSlot ~= nil)
+
+-- One Round / Gems / Chest opens are Developer Products, never Game Passes.
+check("PitchforkRound is a Developer Product, not a Game Pass", MonetizationConfig.DeveloperProducts.PitchforkRound ~= nil)
+check("DynamiteRound is a Developer Product, not a Game Pass", MonetizationConfig.DeveloperProducts.DynamiteRound ~= nil)
+check("VacuumRound is a Developer Product, not a Game Pass", MonetizationConfig.DeveloperProducts.VacuumRound ~= nil)
+check("DroneRound is a Developer Product, not a Game Pass", MonetizationConfig.DeveloperProducts.DroneRound ~= nil)
+
+-- RunProduct ProductKey must match what ToolService.Init() actually
+-- registers (RunConfig.ONE_ROUND_PRODUCT_KEYS values) -- a mismatch here
+-- means a real purchase would silently grant nothing (no callback found).
+checkEqual("PitchforkRound.ProductKey matches ToolService registration",
+	MonetizationConfig.DeveloperProducts.PitchforkRound.ProductKey, RunConfig.ONE_ROUND_PRODUCT_KEYS.Pitchfork)
+checkEqual("DynamiteRound.ProductKey matches ToolService registration",
+	MonetizationConfig.DeveloperProducts.DynamiteRound.ProductKey, RunConfig.ONE_ROUND_PRODUCT_KEYS.Dynamite)
+checkEqual("VacuumRound.ProductKey matches ToolService registration",
+	MonetizationConfig.DeveloperProducts.VacuumRound.ProductKey, RunConfig.ONE_ROUND_PRODUCT_KEYS.Vacuum)
+checkEqual("DroneRound.ProductKey matches ToolService registration",
+	MonetizationConfig.DeveloperProducts.DroneRound.ProductKey, RunConfig.ONE_ROUND_PRODUCT_KEYS.Drone)
 
 -- ============================================================
 -- 12. Sale math (SellService.ComputeSaleCents is pure -- run/state
@@ -924,12 +975,14 @@ print(table.concat({
 	"  - Party create/join/start/leave/leader-transfer/max-size/queueing ARE exercised above end-to-end with",
 	"    fake players (PartyMembership/RunQueueOrdering suites) -- what's NOT covered is the party PAD touch",
 	"    flow, real Farmer/Egg pickup range checks, and anything through an actual connected client/remote",
-	"  - Marketplace prompts (no real product/pass IDs exist yet -- see MonetizationConfig)",
+	"  - Marketplace prompts and real purchase flows (real product/pass IDs are configured, but this",
+	"    suite never prompts a real Robux purchase -- needs a live Studio interaction test instead)",
 	"  - Code redemption end-to-end (one-time-use check reads a loaded profile's CodesRedeemed)",
 	"  - StatsService.ReportRunTime's Best-Time-only-if-better comparison, and every stat increment",
 	"    (Wins/Playtime/Feathers) -- all read/write a loaded profile",
 	"  - MonetizationService.ProcessReceipt idempotency end-to-end (isReceiptProcessed/markReceiptProcessed",
-	"    read/write a loaded profile; the catalog lookup itself has no real IDs to test against yet)",
+	"    read/write a loaded profile -- the catalog lookup itself (real IDs -> Kind/EntitlementKey/",
+	"    ProductKey) IS exercised above without a profile, via the Monetization suite's structural checks)",
 	"  - InventoryService skin ownership/equip validation (reads a loaded profile)",
 	"  - PermanentOwned tool ownership persisting across a run reset (the entitlement check itself needs a",
 	"    loaded profile -- RunOwned's reset IS covered above via a fake player)",
