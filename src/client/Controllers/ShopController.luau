@@ -310,7 +310,28 @@ function ShopController.open(defaultTab: string?)
 
 	selectTab(defaultTab or "BAG")
 
-	UIController.openOverlay("Shop", overlay.Frame)
+	-- Bag level/cost/affordability and InfiniteBag ownership are both
+	-- authoritative server state (Gameplay_RunState and Core_ProfileUpdated
+	-- respectively) -- rebuild the BAG tab in place whenever either arrives
+	-- so it never shows a stale level/cost after a purchase confirms.
+	local function refreshBagTab()
+		local frame = pageFrames.BAG
+		if not frame then
+			return
+		end
+		for _, child in ipairs(frame:GetChildren()) do
+			child:Destroy()
+		end
+		buildBagTab(frame)
+	end
+
+	local runConnection = PlayerState.RunChanged:Connect(refreshBagTab)
+	local profileConnection = PlayerState.ProfileChanged:Connect(refreshBagTab)
+
+	UIController.openOverlay("Shop", overlay.Frame, function()
+		runConnection:Disconnect()
+		profileConnection:Disconnect()
+	end)
 end
 
 function ShopController.init(ui)

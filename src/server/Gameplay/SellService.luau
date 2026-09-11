@@ -89,11 +89,16 @@ function SellService.RequestSell(player: Player)
 		local saleCents = SellService.ComputeSaleCents(run, state, normalCount, rainbowCount)
 		RunPlayerStateService.AddCash(state, saleCents)
 
-		RoundService.SendNotification(
-			player,
-			("Sold %d feathers for $%.2f!"):format(totalSold, saleCents / 100),
-			"Success"
-		)
+		-- Call out the Rainbow Feather mix for a mixed bag so a payout like
+		-- 24 normal + 1 Rainbow = $0.29 ($0.24 + $0.05) is self-explanatory
+		-- instead of looking like an odd/wrong total.
+		local message
+		if rainbowCount > 0 then
+			message = ("Sold %d Feathers + %d Rainbow for $%.2f!"):format(normalCount, rainbowCount, saleCents / 100)
+		else
+			message = ("Sold %d feathers for $%.2f!"):format(totalSold, saleCents / 100)
+		end
+		RoundService.SendNotification(player, message, "Success")
 		RoundService.BroadcastPlayerState(player)
 
 		return true

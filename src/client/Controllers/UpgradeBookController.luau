@@ -285,8 +285,50 @@ local function buildVacuumPage(body: Instance)
 	})
 end
 
+-- Single dispatch used both for the initial build and for every refresh, so
+-- a rebuilt page is always identical to a freshly-opened one.
+local function buildPageInto(page: string, frame: Instance)
+	if page == "HAND" then
+		buildHandPage(frame)
+	elseif page == "PITCHFORK" then
+		buildToolPage(frame, "Pitchfork", DisplayConfig.Pitchfork.Description, DisplayConfig.Pitchfork.Identity, {
+			{ Id = "Sweep", Config = DisplayConfig.Pitchfork.Sweep },
+			{ Id = "Speed", Config = DisplayConfig.Pitchfork.Speed, Format = function(v) return ("%.2fs"):format(v) end },
+			{ Id = "Dig", Config = DisplayConfig.Pitchfork.Dig, Format = function(v) return ("%.2fx"):format(v) end },
+		})
+	elseif page == "DYNAMITE" then
+		buildToolPage(frame, "Dynamite", DisplayConfig.Dynamite.Description, nil, {
+			{ Id = "Power", Config = DisplayConfig.Dynamite.Power, Format = function(v) return ("%.2fx"):format(v) end },
+			{ Id = "Speed", Config = DisplayConfig.Dynamite.Speed, Format = function(v) return ("%.1fs"):format(v) end },
+			{ Id = "LuckyBlast", Config = DisplayConfig.Dynamite.LuckyBlast, Format = function(v) return ("%.0f%%"):format(v * 100) end },
+		})
+	elseif page == "VACUUM" then
+		buildVacuumPage(frame)
+	elseif page == "DRONE" then
+		buildToolPage(frame, "Drone", DisplayConfig.Drone.Description, "Pile -> collect -> return to Chicken sell station -> sell -> repeat.", {
+			{ Id = "Speed", Config = DisplayConfig.Drone.Speed, Format = function(v) return ("%.1fx"):format(v) end },
+			{ Id = "Grasp", Config = DisplayConfig.Drone.Grasp },
+			{ Id = "Capacity", Config = DisplayConfig.Drone.Capacity },
+		})
+	end
+end
+
 local pageFrames: { [string]: Frame } = {}
 local tabButtons: { [string]: TextButton } = {}
+
+-- Rebuilds every page's content in place from current PlayerState, so
+-- whichever page is visible (and every other, ready for its tab) always
+-- reflects the latest authoritative server state -- never a client-side
+-- optimistic update. Called on open and again on every Gameplay_RunState/
+-- Core_ProfileUpdated while the Book stays open.
+local function refreshAllPages()
+	for page, frame in pairs(pageFrames) do
+		for _, child in ipairs(frame:GetChildren()) do
+			child:Destroy()
+		end
+		buildPageInto(page, frame)
+	end
+end
 
 local function selectPage(page: string, body: Instance)
 	currentPage = page
@@ -339,29 +381,7 @@ function UpgradeBookController.open()
 		pageFrame.Parent = pagesHost
 		pageFrames[page] = pageFrame
 
-		if page == "HAND" then
-			buildHandPage(pageFrame)
-		elseif page == "PITCHFORK" then
-			buildToolPage(pageFrame, "Pitchfork", DisplayConfig.Pitchfork.Description, DisplayConfig.Pitchfork.Identity, {
-				{ Id = "Sweep", Config = DisplayConfig.Pitchfork.Sweep },
-				{ Id = "Speed", Config = DisplayConfig.Pitchfork.Speed, Format = function(v) return ("%.2fs"):format(v) end },
-				{ Id = "Dig", Config = DisplayConfig.Pitchfork.Dig, Format = function(v) return ("%.2fx"):format(v) end },
-			})
-		elseif page == "DYNAMITE" then
-			buildToolPage(pageFrame, "Dynamite", DisplayConfig.Dynamite.Description, nil, {
-				{ Id = "Power", Config = DisplayConfig.Dynamite.Power, Format = function(v) return ("%.2fx"):format(v) end },
-				{ Id = "Speed", Config = DisplayConfig.Dynamite.Speed, Format = function(v) return ("%.1fs"):format(v) end },
-				{ Id = "LuckyBlast", Config = DisplayConfig.Dynamite.LuckyBlast, Format = function(v) return ("%.0f%%"):format(v * 100) end },
-			})
-		elseif page == "VACUUM" then
-			buildVacuumPage(pageFrame)
-		elseif page == "DRONE" then
-			buildToolPage(pageFrame, "Drone", DisplayConfig.Drone.Description, "Pile -> collect -> return to Chicken sell station -> sell -> repeat.", {
-				{ Id = "Speed", Config = DisplayConfig.Drone.Speed, Format = function(v) return ("%.1fx"):format(v) end },
-				{ Id = "Grasp", Config = DisplayConfig.Drone.Grasp },
-				{ Id = "Capacity", Config = DisplayConfig.Drone.Capacity },
-			})
-		end
+		buildPageInto(page, pageFrame)
 
 		local tabButton = Theme.newButton({
 			Text = page,
@@ -376,7 +396,17 @@ function UpgradeBookController.open()
 
 	selectPage(currentPage, pagesHost)
 
+	-- Gameplay_RunState (Cash/HandSpeedLevel/HandGraspLevel/HandHoldUnlocked/
+	-- Tools) and Core_ProfileUpdated (Gems, for Drone's Gems buy option) are
+	-- the only two authoritative sources any row here reads from -- refresh
+	-- on both so the open Book never shows a stale level/cost/affordability
+	-- after a purchase confirms server-side.
+	local runConnection = PlayerState.RunChanged:Connect(refreshAllPages)
+	local profileConnection = PlayerState.ProfileChanged:Connect(refreshAllPages)
+
 	UIController.openOverlay("Book", overlay.Frame, function()
+		runConnection:Disconnect()
+		profileConnection:Disconnect()
 		pageFrames = {}
 		tabButtons = {}
 	end)
