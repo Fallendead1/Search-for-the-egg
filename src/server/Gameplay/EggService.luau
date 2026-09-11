@@ -80,7 +80,7 @@ function EggService.RequestPickup(player: Player)
 	if not RoundService.IsActive(run) then
 		return false, "RoundNotActive"
 	end
-	if run.EggState ~= "Available" and run.EggState ~= "Exposed" then
+	if run.EggState ~= "Available" then
 		return false, "EggNotAvailable"
 	end
 

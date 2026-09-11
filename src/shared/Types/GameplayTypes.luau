@@ -4,20 +4,18 @@
 
 local GameplayTypes = {}
 
-export type RoundState =
-	"Lobby"
-	| "PartyForming"
-	| "Loading"
-	| "Active"
-	| "Completing"
-	| "Returning"
-	| "Ended"
+-- Matches RoundService's actual run.State state machine exactly: Queued
+-- (waiting for the shared local pile, see RoundService's header) -> Active
+-- -> Completing -> Returning -> Ended.
+export type RoundState = "Queued" | "Active" | "Completing" | "Returning" | "Ended"
 
 export type ToolOwnershipState = "Locked" | "RunOwned" | "PermanentOwned"
 
-export type EggState = "Buried" | "Exposed" | "Available" | "Carried" | "TurnedIn"
+export type EggState = "Buried" | "Available" | "Carried" | "TurnedIn"
 
+-- Matches PartyService's serializeParty exactly.
 export type PartyState = {
+	InParty: boolean,
 	PartyId: string,
 	OwnerUserId: number,
 	Members: { number },
@@ -25,6 +23,7 @@ export type PartyState = {
 	ChapterId: string,
 	Difficulty: string,
 	CanStart: boolean,
+	Started: boolean,
 }
 
 export type ToolState = {
@@ -34,28 +33,37 @@ export type ToolState = {
 	ExtraLevel: number, -- Dig depth / lucky blast / capacity depending on tool
 }
 
+-- Matches RunPlayerStateService.SerializeForClient exactly -- the
+-- Gameplay_RunState "PlayerState" sub-message.
 export type PlayerRunState = {
-	UserId: number,
 	CashCents: number,
 	BagCount: number,
 	BagCapacity: number,
 	BagLevel: number,
+	RainbowInBag: number,
 	HandHoldUnlocked: boolean,
+	HandSpeed: number, -- collection interval seconds
+	HandGrasp: number, -- amount per collection
 	HandSpeedLevel: number,
 	HandGraspLevel: number,
-	RainbowInBag: number,
 	CarryingEgg: boolean,
 	Tools: { [string]: ToolState },
 }
 
-export type RunState = {
+-- Matches RoundService's broadcastMeta exactly -- the Gameplay_RunState
+-- "RoundMeta" sub-message. See RoundService's header for the full
+-- Gameplay_RunState contract (all three sub-message shapes).
+export type RunMetaState = {
+	RunId: string,
+	InProgress: boolean,
 	RoundState: RoundState,
-	PartyId: string,
 	ChapterId: string,
 	Difficulty: string,
-	StartTime: number,
+	StartedAt: number?,
+	QueuePosition: number?,
 	EggState: EggState,
 	EggCarrierUserId: number?,
+	EggPosition: Vector3?,
 	GoldenHarvestActive: boolean,
 	GoldenHarvestEndsAt: number?,
 }

@@ -51,6 +51,9 @@ RunConfig.COLLECTION_COOLDOWN_GRACE_SECONDS = 0.05
 
 -- Difficulty configuration. Egg depth is expressed as a fraction (0-1) of a
 -- column's max fill that must remain buried before the Egg can be revealed.
+-- Completion reward AMOUNTS are not duplicated here -- MetaConfig/
+-- RewardConfig.Chapters is the one place RewardService/MetaProgressionService
+-- (and DisplayConfig, for the client) read them from.
 RunConfig.DIFFICULTY = {
 	Normal = {
 		Id = "Normal",
@@ -60,11 +63,6 @@ RunConfig.DIFFICULTY = {
 		ColumnDepthMax = 10,
 		EggMinDepthFraction = 0.45,
 		EggMaxDepthFraction = 0.85,
-		CompletionReward = {
-			Gems = 40,
-			AlienTokens = 10,
-			Wins = 1,
-		},
 	},
 	Hard = {
 		Id = "Hard",
@@ -74,11 +72,6 @@ RunConfig.DIFFICULTY = {
 		ColumnDepthMax = 15,
 		EggMinDepthFraction = 0.65,
 		EggMaxDepthFraction = 0.95,
-		CompletionReward = {
-			Gems = 60,
-			AlienTokens = 20,
-			Wins = 1,
-		},
 	},
 }
 

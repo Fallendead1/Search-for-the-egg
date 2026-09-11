@@ -34,6 +34,16 @@ local activeTouchPosition: Vector3? = nil
 local lastCollectAt = 0
 local MIN_COLLECT_INTERVAL_FLOOR = 0.15 -- absolute safety floor regardless of upgrades
 
+local lastDynamiteThrowAt = 0
+local DYNAMITE_CLIENT_DEBOUNCE_SECONDS = 0.2 -- light client-side debounce; DynamiteConfig's real cooldown is server-authoritative
+
+-- Vacuum/Drone are activate-and-forget: toggled via their hotbar button
+-- (InputController.toggleAutoTool), never by aiming/clicking the world.
+-- This just mirrors what THIS client last requested for hotbar highlight
+-- purposes -- the server (VacuumService/DroneService) is the only
+-- authority on whether they're actually running.
+local autoToolActive: { [string]: boolean } = { Vacuum = false, Drone = false }
+
 local function getMouseTargetPosition(): Vector3?
 	local mouse = player:GetMouse()
 	return mouse.Hit and mouse.Hit.Position
@@ -81,6 +91,42 @@ local function requestCollect(targetPosition: Vector3?)
 	SoundController.play("Collect", 0.35)
 end
 
+-- Dynamite has no Hold mechanic -- each click/tap is one throw attempt, not
+-- a continuous action, so this is only ever called from InputBegan, never
+-- from the Heartbeat hold-loop below.
+local function requestDynamiteThrow(targetPosition: Vector3?)
+	if not targetPosition then
+		return
+	end
+	if not PlayerState.Run.InProgress then
+		return
+	end
+
+	local now = os.clock()
+	if now - lastDynamiteThrowAt < DYNAMITE_CLIENT_DEBOUNCE_SECONDS then
+		return
+	end
+	lastDynamiteThrowAt = now
+
+	Remotes.fireServer("Gameplay_RequestToolAction", {
+		Tool = "Dynamite",
+		Action = "Throw",
+		TargetPosition = targetPosition,
+	})
+	SoundController.play("DynamiteThrow", 0.5)
+end
+
+-- Dispatches a world click/tap by the currently selected tool. Vacuum/Drone
+-- intentionally do nothing here -- they're toggled via their hotbar button,
+-- not aimed at the world.
+local function dispatchPrimaryAction(targetPosition: Vector3?)
+	if currentTool == "Hand" or currentTool == "Pitchfork" then
+		requestCollect(targetPosition)
+	elseif currentTool == "Dynamite" then
+		requestDynamiteThrow(targetPosition)
+	end
+end
+
 function InputController.selectTool(tool: string)
 	if not TOOL_SLOTS[1] then
 		return
@@ -98,6 +144,40 @@ function InputController.getCurrentTool(): string
 	return currentTool
 end
 
+-- Vacuum/Drone activation. Server remains authoritative (VacuumService/
+-- DroneService.handleToggle re-validate ownership/run state); this only
+-- sends the request and flips a local "last requested" flag for hotbar
+-- highlighting, mirroring the same server-authoritative pattern used
+-- everywhere else in this client.
+function InputController.toggleAutoTool(tool: string)
+	if autoToolActive[tool] == nil then
+		return
+	end
+	if not isToolOwned(tool) then
+		InputController.ToolLocked:Fire(tool)
+		SoundController.play("Locked")
+		return
+	end
+	if not PlayerState.Run.InProgress then
+		return
+	end
+
+	local newState = not autoToolActive[tool]
+	autoToolActive[tool] = newState
+
+	Remotes.fireServer("Gameplay_RequestToolAction", {
+		Tool = tool,
+		Action = "Toggle",
+		Active = newState,
+	})
+	SoundController.play(newState and "Upgrade" or "ButtonClick")
+	InputController.ToolChanged:Fire(tool)
+end
+
+function InputController.isAutoToolActive(tool: string): boolean
+	return autoToolActive[tool] == true
+end
+
 function InputController.init()
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if gameProcessed then
@@ -106,11 +186,11 @@ function InputController.init()
 
 		if input.UserInputType == Enum.UserInputType.MouseButton1 then
 			holding = true
-			requestCollect(getMouseTargetPosition())
+			dispatchPrimaryAction(getMouseTargetPosition())
 		elseif input.UserInputType == Enum.UserInputType.Touch then
 			holding = true
 			activeTouchPosition = input.Position
-			requestCollect(getTouchTargetPosition(input.Position))
+			dispatchPrimaryAction(getTouchTargetPosition(input.Position))
 		end
 	end)
 
@@ -151,9 +231,15 @@ function InputController.init()
 	-- Bounded continuous collection while holding, gated on the Hold
 	-- upgrade being owned and a run being in progress. Runs on Heartbeat
 	-- but requestCollect internally enforces the real cadence floor, so
-	-- this never spams the server every frame.
+	-- this never spams the server every frame. Only Hand/Pitchfork have a
+	-- Hold mechanic -- Dynamite is a discrete one-throw-per-click action
+	-- (see dispatchPrimaryAction/InputBegan), and Vacuum/Drone have no
+	-- world-click gesture at all (toggled via their hotbar button instead).
 	game:GetService("RunService").Heartbeat:Connect(function()
 		if not holding then
+			return
+		end
+		if currentTool ~= "Hand" and currentTool ~= "Pitchfork" then
 			return
 		end
 		if not PlayerState.Run.HandHoldUnlocked then

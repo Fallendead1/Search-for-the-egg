@@ -57,6 +57,7 @@ local ChestConfig = tryRequire(findChild("MetaConfig", "ChestConfig"))
 local ClassConfig = tryRequire(findChild("MetaConfig", "ClassConfig"))
 local PermanentPerksConfig = tryRequire(findChild("MetaConfig", "PermanentPerksConfig"))
 local MonetizationConfig = tryRequire(findChild("MetaConfig", "MonetizationConfig"))
+local RewardConfig = tryRequire(findChild("MetaConfig", "RewardConfig"))
 
 DisplayConfig.GameplayConfig = RunConfig
 DisplayConfig.MetaConfig = ClassConfig
@@ -458,9 +459,13 @@ DisplayConfig.Chapters = {
 	},
 }
 
+-- The one source of truth for these amounts is MetaConfig/RewardConfig
+-- .Chapters -- the same table RewardService/MetaProgressionService read
+-- server-side to actually grant them.
+local chapter1Rewards = RewardConfig and RewardConfig.Chapters.Chapter1
 DisplayConfig.CompletionRewards = {
-	Normal = (RunConfig and RunConfig.DIFFICULTY.Normal.CompletionReward) or { Gems = 40, AlienTokens = 10 },
-	Hard = (RunConfig and RunConfig.DIFFICULTY.Hard.CompletionReward) or { Gems = 60, AlienTokens = 20 },
+	Normal = (chapter1Rewards and chapter1Rewards.Normal) or { Gems = 40, AlienTokens = 10, Wins = 1 },
+	Hard = (chapter1Rewards and chapter1Rewards.Hard) or { Gems = 60, AlienTokens = 20, Wins = 1 },
 }
 
 DisplayConfig.MaxPartySize = (RunConfig and RunConfig.PARTY_MAX_SIZE) or 4

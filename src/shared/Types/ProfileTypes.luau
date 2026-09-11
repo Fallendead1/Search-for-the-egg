@@ -58,12 +58,24 @@ export type Profile = {
 	Receipts: Receipts,
 }
 
+-- Canonical Core_ProfileUpdated contract: a FLAT snapshot (see
+-- DataService.GetPublicSnapshot) -- every client Controller reads these
+-- exact top-level fields directly off PlayerState.Profile, never a nested
+-- Currencies/Stats/Classes/Inventory sub-table.
 export type ClientProfileSnapshot = {
-	Currencies: Currencies,
-	Stats: Stats,
-	PermanentPerks: PermanentPerks,
-	Classes: Classes,
-	Inventory: Inventory,
+	Gems: number,
+	AlienTokens: number,
+	TotalWins: number,
+	TimeRecord: number?,
+	TotalPlaytime: number,
+	FeathersCollected: number,
+	PermanentPerkLevels: { [string]: number },
+	OwnedClasses: { [string]: boolean },
+	EquippedClass: string?,
+	SecondClass: string?,
+	SecondSlotUnlocked: boolean,
+	OwnedSkins: { [string]: boolean }, -- "Category_SkinId" -> true
+	EquippedSkins: { [string]: string }, -- Category -> SkinId
 	EntitlementSummary: { [string]: boolean },
 }
 

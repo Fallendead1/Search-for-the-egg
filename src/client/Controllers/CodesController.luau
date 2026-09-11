@@ -14,6 +14,17 @@ local resultLabel: TextLabel? = nil
 local redeemButton: TextButton? = nil
 local pending = false
 
+-- CodeService's Reason strings, mapped to what the player actually sees --
+-- Core_CodeResult never sent a "Message" field, so this fell back to a
+-- generic "Invalid code." for every failure (AlreadyRedeemed, UnknownCode,
+-- etc. all looked the same).
+local REASON_MESSAGES: { [string]: string } = {
+	ProfileNotLoaded = "Your profile isn't loaded yet -- try again in a moment.",
+	InvalidCode = "That code isn't valid.",
+	UnknownCode = "That code doesn't exist.",
+	AlreadyRedeemed = "You've already redeemed that code.",
+}
+
 local function setResult(text: string, success: boolean)
 	if not resultLabel then
 		return
@@ -93,7 +104,11 @@ function CodesController.init(ui)
 		if type(payload) ~= "table" then
 			return
 		end
-		setResult(payload.Message or (payload.Success and "Code redeemed!" or "Invalid code."), payload.Success == true)
+		if payload.Success then
+			setResult("Code redeemed!", true)
+		else
+			setResult(REASON_MESSAGES[payload.Reason] or "Invalid code.", false)
+		end
 	end)
 end
 

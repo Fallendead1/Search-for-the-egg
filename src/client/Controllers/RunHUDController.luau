@@ -136,6 +136,9 @@ local function buildHotbar(parent: Instance)
 		hotbarButtons[tool] = button
 		button.Activated:Connect(function()
 			InputController.selectTool(tool)
+			if tool == "Vacuum" or tool == "Drone" then
+				InputController.toggleAutoTool(tool)
+			end
 		end)
 	end
 end
@@ -176,6 +179,8 @@ local function refreshHotbarStates()
 		Theme.setButtonEnabled(button, true)
 		if not owned then
 			button.BackgroundColor3 = Theme.Colors.Locked
+		elseif (tool == "Vacuum" or tool == "Drone") and InputController.isAutoToolActive(tool) then
+			button.BackgroundColor3 = Theme.Colors.ButtonDanger
 		elseif tool == current then
 			button.BackgroundColor3 = Theme.Colors.ButtonSecondary
 		else
