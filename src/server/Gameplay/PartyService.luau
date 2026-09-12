@@ -62,6 +62,11 @@ local function serializeParty(party: any)
 		MaxSize = party.MaxSize,
 		ChapterId = party.ChapterId,
 		Difficulty = party.Difficulty,
+		FriendsOnly = party.FriendsOnly,
+		-- os.time() epoch seconds the auto-start countdown fires at -- the
+		-- client renders "StartsAt - os.time()" as a live countdown; nil once
+		-- the party has actually started.
+		StartsAt = not party.Started and party.StartsAt or nil,
 		CanStart = party.CanStart,
 		Started = party.Started,
 	}
@@ -94,6 +99,47 @@ local function recomputeCanStart(party: any)
 		return
 	end
 	party.CanStart = chapterUnlocked(owner, party.ChapterId) and difficultyUnlocked(owner, party.Difficulty)
+end
+
+-- Shared by the owner's manual START and the auto-teleport countdown below.
+-- Silently no-ops if the party can't actually start right now (e.g. a
+-- difficulty got locked mid-countdown) -- scheduleAutoStart already checked
+-- CanStart was true when the timer was set, but re-checks here rather than
+-- trusting that state hasn't moved since.
+local function startPartyNow(party: any)
+	if party.Started then
+		return
+	end
+	recomputeCanStart(party)
+	if not party.CanStart then
+		return
+	end
+	party.Started = true
+	broadcastParty(party)
+	onPartyStartRequested(party)
+end
+
+-- (Re)schedules the auto-teleport countdown: solo (MaxSize 1) is fast,
+-- anything targeting more than 1 member gets the full window regardless of
+-- how many actually join -- see RunConfig's header comment. Re-running this
+-- (e.g. after PartyService.SetPartySize) bumps CountdownGeneration so any
+-- previously-scheduled fire for this party becomes a no-op.
+local function scheduleAutoStart(party: any)
+	party.CountdownGeneration = (party.CountdownGeneration or 0) + 1
+	local generation = party.CountdownGeneration
+	local duration = party.MaxSize <= 1 and RunConfig.PARTY_SOLO_COUNTDOWN_SECONDS or RunConfig.PARTY_GROUP_COUNTDOWN_SECONDS
+	party.StartsAt = os.time() + duration
+
+	task.delay(duration, function()
+		local current = parties[party.PartyId]
+		-- Party may have been destroyed (host left solo, or everyone left),
+		-- already started, or superseded by a newer countdown -- any of
+		-- those means this particular firing is stale.
+		if not current or current.Started or current.CountdownGeneration ~= generation then
+			return
+		end
+		startPartyNow(current)
+	end)
 end
 
 function PartyService.GetParty(partyId: string)
@@ -176,6 +222,7 @@ function PartyService.CreateParty(player: Player)
 		MaxSize = RunConfig.PARTY_MAX_SIZE,
 		ChapterId = "Chapter1",
 		Difficulty = "Normal",
+		FriendsOnly = false,
 		CanStart = false,
 		Started = false,
 	}
@@ -184,6 +231,10 @@ function PartyService.CreateParty(player: Player)
 	playerPartyId[player.UserId] = party.PartyId
 
 	recomputeCanStart(party)
+	-- "Ready up" (creating the party) immediately starts the auto-teleport
+	-- countdown -- solo fires fast, a real target size gives latecomers a
+	-- window regardless of whether anyone actually joins.
+	scheduleAutoStart(party)
 	broadcastParty(party)
 
 	return party
@@ -197,6 +248,14 @@ function PartyService.JoinParty(player: Player, partyId: string)
 	local party = parties[partyId]
 	if not party then
 		return false, "PartyNotFound"
+	end
+	if party.FriendsOnly and party.OwnerUserId ~= player.UserId then
+		local ok, isFriend = pcall(function()
+			return player:IsFriendsWith(party.OwnerUserId)
+		end)
+		if not ok or not isFriend then
+			return false, "FriendsOnly"
+		end
 	end
 	if party.Started then
 		return false, "PartyAlreadyStarted"
@@ -247,6 +306,56 @@ function PartyService.SetSelection(player: Player, chapterId: string, difficulty
 	return true
 end
 
+-- Owner-only, like SetSelection. Clamped to [1, RunConfig.PARTY_MAX_SIZE];
+-- refuses to shrink below the current member count rather than silently
+-- kicking anyone. Restarts the auto-teleport countdown at the new size's
+-- duration (see scheduleAutoStart) since 1 vs 2+ members targets a
+-- different countdown length.
+function PartyService.SetPartySize(player: Player, size: number)
+	local party = PartyService.GetPlayerParty(player)
+	if not party then
+		return false, "NotInParty"
+	end
+	if party.OwnerUserId ~= player.UserId then
+		return false, "NotOwner"
+	end
+	if party.Started then
+		return false, "PartyAlreadyStarted"
+	end
+	local clamped = math.clamp(math.floor(size), 1, RunConfig.PARTY_MAX_SIZE)
+	if clamped < #party.Members then
+		return false, "SizeSmallerThanCurrentMembers"
+	end
+
+	party.MaxSize = clamped
+	recomputeCanStart(party)
+	scheduleAutoStart(party)
+	broadcastParty(party)
+
+	return true
+end
+
+-- Owner-only. Only gates NEW joins (JoinParty) -- never kicks an existing
+-- member who isn't a friend, matching "others just would be inside of it
+-- with him and can leave at any time".
+function PartyService.SetFriendsOnly(player: Player, enabled: boolean)
+	local party = PartyService.GetPlayerParty(player)
+	if not party then
+		return false, "NotInParty"
+	end
+	if party.OwnerUserId ~= player.UserId then
+		return false, "NotOwner"
+	end
+	if party.Started then
+		return false, "PartyAlreadyStarted"
+	end
+
+	party.FriendsOnly = enabled == true
+	broadcastParty(party)
+
+	return true
+end
+
 function PartyService.RequestStart(player: Player)
 	local party = PartyService.GetPlayerParty(player)
 	if not party then
@@ -264,18 +373,17 @@ function PartyService.RequestStart(player: Player)
 		return false, "CannotStart"
 	end
 
-	party.Started = true
-	broadcastParty(party)
-	onPartyStartRequested(party)
+	startPartyNow(party)
 
 	return true
 end
 
 -- Called by RoundService if a start ultimately fails after Started was
 -- already set to true (e.g. a production ReserveServer/TeleportAsync
--- failure) -- resets Started and re-broadcasts so the party isn't
--- permanently stuck unable to ever start again (RequestStart above
--- rejects with "PartyAlreadyStarted" while this stays true).
+-- failure) -- resets Started, re-broadcasts, and reschedules the
+-- auto-teleport countdown so the party isn't permanently stuck unable to
+-- ever start again (RequestStart above rejects with "PartyAlreadyStarted"
+-- while this stays true).
 function PartyService.NotifyStartFailed(partyId: string)
 	local party = parties[partyId]
 	if not party then
@@ -283,6 +391,7 @@ function PartyService.NotifyStartFailed(partyId: string)
 	end
 	party.Started = false
 	recomputeCanStart(party)
+	scheduleAutoStart(party)
 	broadcastParty(party)
 end
 
@@ -315,6 +424,8 @@ function PartyService.Init()
 		CreateParty = RemotesLocator.Get("Gameplay_RequestCreateParty"),
 		Join = RemotesLocator.Get("Gameplay_RequestJoinParty"),
 		SetSelection = RemotesLocator.Get("Gameplay_RequestSetPartySelection"),
+		SetPartySize = RemotesLocator.Get("Gameplay_RequestSetPartySize"),
+		SetFriendsOnly = RemotesLocator.Get("Gameplay_RequestSetFriendsOnly"),
 		Start = RemotesLocator.Get("Gameplay_RequestStartParty"),
 		Leave = RemotesLocator.Get("Gameplay_RequestLeaveParty"),
 	}
@@ -335,6 +446,17 @@ function PartyService.Init()
 			return
 		end
 		PartyService.SetSelection(player, chapterId, difficultyId)
+	end)
+
+	remotes.SetPartySize.OnServerEvent:Connect(function(player: Player, size)
+		if type(size) ~= "number" then
+			return
+		end
+		PartyService.SetPartySize(player, size)
+	end)
+
+	remotes.SetFriendsOnly.OnServerEvent:Connect(function(player: Player, enabled)
+		PartyService.SetFriendsOnly(player, enabled == true)
 	end)
 
 	remotes.Start.OnServerEvent:Connect(function(player: Player)

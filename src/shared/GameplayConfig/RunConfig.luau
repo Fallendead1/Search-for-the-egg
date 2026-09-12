@@ -6,6 +6,12 @@ local RunConfig = {}
 
 RunConfig.PARTY_MAX_SIZE = 4
 
+-- Auto-start countdown: a solo party (target size 1) starts fast; any party
+-- targeting more than 1 member gives latecomers a real window to join before
+-- auto-teleporting, regardless of how many actually joined by then.
+RunConfig.PARTY_SOLO_COUNTDOWN_SECONDS = 5
+RunConfig.PARTY_GROUP_COUNTDOWN_SECONDS = 20
+
 -- Feather economy (integer cents to avoid float drift).
 RunConfig.FEATHER_VALUE_CENTS = 1
 RunConfig.RAINBOW_FEATHER_VALUE_CENTS = 5

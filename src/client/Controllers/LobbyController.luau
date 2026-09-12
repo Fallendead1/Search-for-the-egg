@@ -46,6 +46,18 @@ local function buildTopBar(parent: Instance)
 	gemsPanel.BackgroundColor3 = Theme.Colors.Gems
 	gemsLabel = Theme.newLabel({ Text = "0 GEMS", Size = UDim2.fromScale(1, 1), Parent = gemsPanel })
 
+	-- Clicking the Gems currency readout opens the same real Gems purchase
+	-- flow as the Shop's GEMS tab -- no separate purchase system.
+	local gemsHitButton = Instance.new("TextButton")
+	gemsHitButton.BackgroundTransparency = 1
+	gemsHitButton.Text = ""
+	gemsHitButton.Size = UDim2.fromScale(1, 1)
+	gemsHitButton.Parent = gemsPanel
+	gemsHitButton.Activated:Connect(function()
+		SoundController.play("ButtonClick")
+		ShopController.open("GEMS")
+	end)
+
 	local tokensPanel = Theme.newPanel("AlienTokens", topBar)
 	tokensPanel.Size = UDim2.new(0, 150, 1, 0)
 	tokensPanel.BackgroundColor3 = Theme.Colors.AlienTokens

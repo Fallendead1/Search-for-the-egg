@@ -58,9 +58,16 @@ PlayerState.Run = {
 
 PlayerState.Party = {
 	InParty = false,
+	OwnerUserId = nil :: number?,
 	Members = {} :: { number },
+	MaxSize = 4,
 	ChapterId = nil :: string?,
 	Difficulty = nil :: string?,
+	FriendsOnly = false,
+	-- os.time() epoch seconds the server will auto-start at; nil once
+	-- Started (may still hold a stale value after that -- always check
+	-- Started first, never render a countdown from this alone).
+	StartsAt = nil :: number?,
 	Started = false,
 }
 

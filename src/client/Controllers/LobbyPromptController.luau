@@ -47,34 +47,34 @@ local function attachPrompt(instance: Instance, actionText: string, objectText: 
 	prompt.Triggered:Connect(onTriggered)
 end
 
--- Workspace streaming means a tagged NPC under the (large) physical Lobby
--- model isn't guaranteed to have streamed in yet by the time this
--- LocalScript's first pass runs, and GetInstanceAddedSignal isn't a reliable
--- catch-all for tag-carrying content that streams in afterward. A short
--- bounded retry (instead of a single scan) covers that gap without needing
--- a hardcoded path to the Lobby model.
-local RETRY_INTERVAL_SECONDS = 1
-local RETRY_ATTEMPTS = 15
+-- workspace.StreamingEnabled is on, and it streams by PROXIMITY to the
+-- player's character/camera, not by elapsed time -- a tagged NPC under the
+-- (large) physical Lobby model may not stream in until the player actually
+-- walks near it, whenever that happens to be. Confirmed live in Studio that
+-- CollectionService:GetInstanceAddedSignal does NOT reliably fire for a tag
+-- that was already present in the Edit-time data once that instance streams
+-- in (that signal is really for tags added at runtime) -- both
+-- ShopKeeperNPC's and ClassTrainerNPC's prompts silently never attached
+-- even walking right up to them, while a fresh CollectionService:GetTagged()
+-- poll at that same moment found them immediately. So: poll indefinitely
+-- (not a bounded retry) instead of trusting that signal alone. attach() is
+-- idempotent (attachPrompt no-ops once a prompt already exists), so
+-- re-scanning already-attached instances every tick is harmless.
+local POLL_INTERVAL_SECONDS = 2
 
 local function initTag(tagName: string, actionText: string, objectText: string, onTriggered: () -> ())
 	local function attach(instance: Instance)
 		attachPrompt(instance, actionText, objectText, onTriggered)
 	end
 
-	for _, instance in ipairs(CollectionService:GetTagged(tagName)) do
-		attach(instance)
-	end
 	CollectionService:GetInstanceAddedSignal(tagName):Connect(attach)
 
 	task.spawn(function()
-		for _ = 1, RETRY_ATTEMPTS do
-			if #CollectionService:GetTagged(tagName) > 0 then
-				for _, instance in ipairs(CollectionService:GetTagged(tagName)) do
-					attach(instance)
-				end
-				return
+		while true do
+			for _, instance in ipairs(CollectionService:GetTagged(tagName)) do
+				attach(instance)
 			end
-			task.wait(RETRY_INTERVAL_SECONDS)
+			task.wait(POLL_INTERVAL_SECONDS)
 		end
 	end)
 end
