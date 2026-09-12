@@ -92,6 +92,23 @@ function MapAnchors.GetBagUpgradeCounters(): { Instance }
 	return tagged
 end
 
+-- Where to physically place a party's characters once their run goes
+-- Active. Falls back to the pile position (still inside the gameplay map,
+-- rather than leaving players stranded back in the Lobby) if nothing is
+-- tagged yet.
+function MapAnchors.GetChapterSpawnPosition(): Vector3
+	local anchor = firstTagged(RunConfig.TAGS.ChapterSpawn)
+	if anchor then
+		if anchor:IsA("BasePart") then
+			return anchor.Position
+		elseif anchor:IsA("Model") and anchor.PrimaryPart then
+			return anchor.PrimaryPart.Position
+		end
+	end
+	warnOnce(RunConfig.TAGS.ChapterSpawn, "spawning at the pile position instead")
+	return MapAnchors.GetPilePosition()
+end
+
 function MapAnchors.GetSafeEggFallbackPosition(): Vector3
 	local anchor = firstTagged(RunConfig.TAGS.SafeEggFallback)
 	if anchor and anchor:IsA("BasePart") then

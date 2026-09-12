@@ -25,6 +25,9 @@ local TOOL_SLOTS: { [number]: string } = {
 	[3] = "Dynamite",
 	[4] = "Drone",
 	[5] = "Vacuum",
+	[6] = "FeatherGrabber",
+	[7] = "TornadoLauncher",
+	[8] = "PackingBot",
 }
 
 local player = Players.LocalPlayer
@@ -42,7 +45,7 @@ local DYNAMITE_CLIENT_DEBOUNCE_SECONDS = 0.2 -- light client-side debounce; Dyna
 -- This just mirrors what THIS client last requested for hotbar highlight
 -- purposes -- the server (VacuumService/DroneService) is the only
 -- authority on whether they're actually running.
-local autoToolActive: { [string]: boolean } = { Vacuum = false, Drone = false }
+local autoToolActive: { [string]: boolean } = { Vacuum = false, Drone = false, PackingBot = false }
 
 local function getMouseTargetPosition(): Vector3?
 	local mouse = player:GetMouse()
@@ -120,7 +123,7 @@ end
 -- intentionally do nothing here -- they're toggled via their hotbar button,
 -- not aimed at the world.
 local function dispatchPrimaryAction(targetPosition: Vector3?)
-	if currentTool == "Hand" or currentTool == "Pitchfork" then
+	if currentTool == "Hand" or currentTool == "Pitchfork" or currentTool == "FeatherGrabber" or currentTool == "TornadoLauncher" then
 		requestCollect(targetPosition)
 	elseif currentTool == "Dynamite" then
 		requestDynamiteThrow(targetPosition)
@@ -213,6 +216,9 @@ function InputController.init()
 		[Enum.KeyCode.Three] = 3,
 		[Enum.KeyCode.Four] = 4,
 		[Enum.KeyCode.Five] = 5,
+		[Enum.KeyCode.Six] = 6,
+		[Enum.KeyCode.Seven] = 7,
+		[Enum.KeyCode.Eight] = 8,
 	}
 
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)

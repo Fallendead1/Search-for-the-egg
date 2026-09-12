@@ -117,6 +117,8 @@ local SIMPLE_HANDLERS = {
 local CASH_UNLOCK_TOOLS = {
 	Pitchfork = true,
 	Dynamite = true,
+	FeatherGrabber = true,
+	TornadoLauncher = true,
 }
 
 local TOOL_UPGRADE_ID_TO_TRACK = {

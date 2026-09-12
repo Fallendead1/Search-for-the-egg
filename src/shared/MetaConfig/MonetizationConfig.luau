@@ -27,6 +27,13 @@ MonetizationConfig.DeveloperProducts = {
 	VacuumRound = { Id = 3712387136, RobuxPrice = 40, Kind = "RunProduct", ProductKey = "VacuumOneRound" },
 	DroneRound = { Id = 3712387138, RobuxPrice = 16, Kind = "RunProduct", ProductKey = "DroneOneRound" },
 
+	-- NEW this milestone (MAJOR GAMEPLAY/WORLD INTEGRATION UPDATE). Id = 0 is
+	-- a deliberate placeholder -- do NOT create these via Open Cloud yet; see
+	-- the final report for the exact items still needing manual approval.
+	FeatherGrabberRound = { Id = 0, RobuxPrice = 16, Kind = "RunProduct", ProductKey = "FeatherGrabberOneRound" },
+	TornadoLauncherRound = { Id = 0, RobuxPrice = 64, Kind = "RunProduct", ProductKey = "TornadoLauncherOneRound" },
+	PackingBotRound = { Id = 0, RobuxPrice = 40, Kind = "RunProduct", ProductKey = "PackingBotOneRound" },
+
 	AlienChest3 = { Id = 3712387145, RobuxPrice = 72, Kind = "ChestMultiOpen", ChestCount = 3 },
 	AlienChest5 = { Id = 3712387148, RobuxPrice = 104, Kind = "ChestMultiOpen", ChestCount = 5 },
 	AlienChest10 = { Id = 3712387151, RobuxPrice = 184, Kind = "ChestMultiOpen", ChestCount = 10 },
@@ -50,6 +57,11 @@ MonetizationConfig.GamePasses = {
 	ClassLuck2x = { Id = 1979546654, RobuxPrice = 160, EntitlementKey = "ClassLuck2x" },
 	FastRolls = { Id = 1980020399, RobuxPrice = 144, EntitlementKey = "FastRolls" },
 	ExtraClassSlot = { Id = 1976402936, RobuxPrice = 96, EntitlementKey = "ExtraClassSlot" },
+
+	-- NEW this milestone. Id = 0 placeholder -- see FeatherGrabberRound above.
+	FeatherGrabberPermanent = { Id = 0, RobuxPrice = 80, EntitlementKey = "FeatherGrabberPermanent" },
+	TornadoLauncherPermanent = { Id = 0, RobuxPrice = 224, EntitlementKey = "TornadoLauncherPermanent" },
+	PackingBotPermanent = { Id = 0, RobuxPrice = 144, EntitlementKey = "PackingBotPermanent" },
 }
 
 -- Gem-alternative price for a Drone round, per GDD ("40 Gems alternative").

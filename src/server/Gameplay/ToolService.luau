@@ -26,6 +26,9 @@ local PitchforkConfig = require(GameplayConfig.PitchforkConfig)
 local DynamiteConfig = require(GameplayConfig.DynamiteConfig)
 local VacuumConfig = require(GameplayConfig.VacuumConfig)
 local DroneConfig = require(GameplayConfig.DroneConfig)
+local FeatherGrabberConfig = require(GameplayConfig.FeatherGrabberConfig)
+local TornadoLauncherConfig = require(GameplayConfig.TornadoLauncherConfig)
+local PackingBotConfig = require(GameplayConfig.PackingBotConfig)
 
 local RemotesLocator = require(script.Parent.RemotesLocator)
 local CoreLocator = require(script.Parent.CoreLocator)
@@ -94,6 +97,10 @@ function ToolService.BuyUnlock(player: Player, toolName: string)
 		unlockCostCents = PitchforkConfig.UNLOCK_COST_CENTS
 	elseif toolName == "Dynamite" then
 		unlockCostCents = DynamiteConfig.UNLOCK_COST_CENTS
+	elseif toolName == "FeatherGrabber" then
+		unlockCostCents = FeatherGrabberConfig.UNLOCK_COST_CENTS
+	elseif toolName == "TornadoLauncher" then
+		unlockCostCents = TornadoLauncherConfig.UNLOCK_COST_CENTS
 	else
 		return false, "NoCashUnlockForTool"
 	end
@@ -154,42 +161,55 @@ function ToolService.BuyUpgrade(player: Player, toolName: string, trackName: str
 	return true
 end
 
-local DRONE_GEMS_FAILURE_MESSAGES: { [string]: string } = {
+local GEMS_FAILURE_MESSAGES: { [string]: string } = {
 	RoundNotActive = "Start a run first.",
 	NoRunState = "Start a run first.",
-	AlreadyOwned = "Drone already deployed this run.",
+	AlreadyOwned = "Already deployed this run.",
 	InsufficientGems = "Not enough Gems for that.",
 }
 
--- Drone's alternate 40-Gem run-ownership purchase.
-function ToolService.BuyDroneWithGems(player: Player)
+-- Shared by Drone (40 Gems) and Packing Bot (45 Gems) -- both are one-round,
+-- Gems-priced "helper" run-ownership purchases with the same shape, so this
+-- is generalized rather than duplicated per Section 17's "reuse/generalize
+-- existing Drone... concepts where appropriate".
+local function buyToolWithGems(player: Player, toolName: string, gemCost: number, currencySpendReason: string)
 	local run = RoundService.GetRunForPlayer(player)
 	if not RoundService.IsActive(run) then
-		RoundService.SendNotification(player, DRONE_GEMS_FAILURE_MESSAGES.RoundNotActive, "Error")
+		RoundService.SendNotification(player, GEMS_FAILURE_MESSAGES.RoundNotActive, "Error")
 		return false, "RoundNotActive"
 	end
 
 	local state = RunPlayerStateService.Get(player)
 	if not state then
-		RoundService.SendNotification(player, DRONE_GEMS_FAILURE_MESSAGES.NoRunState, "Error")
+		RoundService.SendNotification(player, GEMS_FAILURE_MESSAGES.NoRunState, "Error")
 		return false, "NoRunState"
 	end
-	if ToolService.IsOwned(state, "Drone") then
-		RoundService.SendNotification(player, DRONE_GEMS_FAILURE_MESSAGES.AlreadyOwned, "Error")
+	if ToolService.IsOwned(state, toolName) then
+		RoundService.SendNotification(player, GEMS_FAILURE_MESSAGES.AlreadyOwned, "Error")
 		return false, "AlreadyOwned"
 	end
 
 	local currency = CoreLocator.GetCurrencyService()
-	local spent = currency.TrySpend(player, "Gems", DroneConfig.ONE_ROUND_GEM_COST, "RunDrone")
+	local spent = currency.TrySpend(player, "Gems", gemCost, currencySpendReason)
 	if not spent then
-		RoundService.SendNotification(player, DRONE_GEMS_FAILURE_MESSAGES.InsufficientGems, "Error")
+		RoundService.SendNotification(player, GEMS_FAILURE_MESSAGES.InsufficientGems, "Error")
 		return false, "InsufficientGems"
 	end
 
-	state.Tools.Drone.Ownership = "RunOwned"
+	state.Tools[toolName].Ownership = "RunOwned"
 	RoundService.BroadcastPlayerState(player)
-	RoundService.SendNotification(player, "Drone deployed for this run!", "Success")
+	RoundService.SendNotification(player, toolName .. " deployed for this run!", "Success")
 	return true
+end
+
+-- Drone's alternate 40-Gem run-ownership purchase.
+function ToolService.BuyDroneWithGems(player: Player)
+	return buyToolWithGems(player, "Drone", DroneConfig.ONE_ROUND_GEM_COST, "RunDrone")
+end
+
+-- Packing Bot's alternate 45-Gem run-ownership purchase.
+function ToolService.BuyPackingBotWithGems(player: Player)
+	return buyToolWithGems(player, "PackingBot", PackingBotConfig.ONE_ROUND_GEM_COST, "RunPackingBot")
 end
 
 local function handleRunProductGrant(toolName: string)
@@ -218,10 +238,15 @@ local function onToolActionRemote(player: Player, payload: any)
 
 	local toolName, action = payload.Tool, payload.Action
 
-	-- Drone's alternate one-round buy is a Gems (not Cash) transaction, so it
-	-- stays here rather than under Gameplay_RequestBuyRunUpgrade.
+	-- Drone/Packing Bot's alternate one-round buy is a Gems (not Cash)
+	-- transaction, so it stays here rather than under
+	-- Gameplay_RequestBuyRunUpgrade.
 	if action == "BuyDroneGems" and toolName == "Drone" then
 		ToolService.BuyDroneWithGems(player)
+		return
+	end
+	if action == "BuyPackingBotGems" and toolName == "PackingBot" then
+		ToolService.BuyPackingBotWithGems(player)
 		return
 	end
 

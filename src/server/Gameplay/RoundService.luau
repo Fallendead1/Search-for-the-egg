@@ -56,6 +56,7 @@ local CoreLocator = require(script.Parent.CoreLocator)
 local PartyService = require(script.Parent.PartyService)
 local RunPlayerStateService = require(script.Parent.RunPlayerStateService)
 local FeatherPileService = require(script.Parent.FeatherPileService)
+local MapAnchors = require(script.Parent.MapAnchors)
 
 local RoundService = {}
 
@@ -247,6 +248,20 @@ local function createRunFromParty(party: any)
 	return run
 end
 
+-- The local same-server fallback (Chapter1PlaceId unconfigured) has no
+-- TeleportAsync to move a player anywhere -- without this, a run going
+-- Active never actually gets its party from the Lobby into the gameplay
+-- map at all. Also runs (harmlessly) after a real cross-place teleport, so
+-- arriving players land exactly on the map's intended spawn rather than
+-- wherever the receiving place's default spawn happens to be.
+local function moveCharacterTo(userId: number, position: Vector3)
+	local player = Players:GetPlayerByUserId(userId)
+	local character = player and player.Character
+	if character and character:FindFirstChild("HumanoidRootPart") then
+		character:PivotTo(CFrame.new(position + Vector3.new(0, 3, 0)))
+	end
+end
+
 local tryAdvanceQueue
 
 -- Actually builds the pile and flips a queued run to Active. Only ever
@@ -259,6 +274,11 @@ local function startRunNow(run: any)
 		if player then
 			RunPlayerStateService.InitPlayer(player, run.Difficulty)
 		end
+	end
+
+	local chapterSpawnPosition = MapAnchors.GetChapterSpawnPosition()
+	for _, userId in ipairs(run.Members) do
+		moveCharacterTo(userId, chapterSpawnPosition)
 	end
 
 	FeatherPileService.BuildForRun(run, run.Difficulty)
@@ -444,6 +464,19 @@ function RoundService.EndRun(run: any)
 
 	if run.Pile then
 		FeatherPileService.Destroy(run.Pile)
+	end
+
+	-- Only meaningful on the local same-server fallback -- once
+	-- Chapter1PlaceId is configured, "returning to the Lobby" is a real
+	-- cross-place teleport this module doesn't own, not a local CFrame move.
+	if not TeleportConfig.IsChapter1TeleportConfigured() then
+		local lobby = Workspace:FindFirstChild("SearchForTheEgg_Lobby")
+		local lobbySpawn = lobby and lobby:FindFirstChild("LobbySpawn")
+		if lobbySpawn then
+			for _, userId in ipairs(run.Members) do
+				moveCharacterTo(userId, lobbySpawn.Position)
+			end
+		end
 	end
 
 	for _, userId in ipairs(run.Members) do

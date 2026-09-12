@@ -52,6 +52,9 @@ local PitchforkConfig = tryRequire(findChild("GameplayConfig", "PitchforkConfig"
 local DynamiteConfig = tryRequire(findChild("GameplayConfig", "DynamiteConfig"))
 local VacuumConfig = tryRequire(findChild("GameplayConfig", "VacuumConfig"))
 local DroneConfig = tryRequire(findChild("GameplayConfig", "DroneConfig"))
+local FeatherGrabberConfig = tryRequire(findChild("GameplayConfig", "FeatherGrabberConfig"))
+local TornadoLauncherConfig = tryRequire(findChild("GameplayConfig", "TornadoLauncherConfig"))
+local PackingBotConfig = tryRequire(findChild("GameplayConfig", "PackingBotConfig"))
 local RunConfig = tryRequire(findChild("GameplayConfig", "RunConfig"))
 local ChestConfig = tryRequire(findChild("MetaConfig", "ChestConfig"))
 local ClassConfig = tryRequire(findChild("MetaConfig", "ClassConfig"))
@@ -266,6 +269,41 @@ DisplayConfig.Drone = {
 			{ Level = 4, Value = 150, CostCents = 2000 },
 			{ Level = 5, Value = 200, CostCents = 2500 },
 		}) },
+}
+
+-- ============================================================
+-- FEATHER GRABBER (new equipment, fixed stats -- no upgrade levels)
+-- ============================================================
+DisplayConfig.FeatherGrabber = {
+	CashCostCents = (FeatherGrabberConfig and FeatherGrabberConfig.UNLOCK_COST_CENTS) or 600,
+	OneRoundRobux = (FeatherGrabberConfig and FeatherGrabberConfig.ONE_ROUND_ROBUX) or 16,
+	PermanentRobux = (FeatherGrabberConfig and FeatherGrabberConfig.PERMANENT_ROBUX) or 80,
+	Description = "Grabs a big scoop of feathers at once.",
+	GrabAmount = (FeatherGrabberConfig and FeatherGrabberConfig.GRAB_AMOUNT) or 16,
+	ActionSeconds = (FeatherGrabberConfig and FeatherGrabberConfig.ACTION_SECONDS) or 2.0,
+}
+
+-- ============================================================
+-- FEATHER TORNADO LAUNCHER (new equipment, fixed stats)
+-- ============================================================
+DisplayConfig.TornadoLauncher = {
+	CashCostCents = (TornadoLauncherConfig and TornadoLauncherConfig.UNLOCK_COST_CENTS) or 7500,
+	OneRoundRobux = (TornadoLauncherConfig and TornadoLauncherConfig.ONE_ROUND_ROBUX) or 64,
+	PermanentRobux = (TornadoLauncherConfig and TornadoLauncherConfig.PERMANENT_ROBUX) or 224,
+	Description = "Launches a swirling funnel that pulls a huge amount of feathers out of the pile at once.",
+	MaxCollectAmount = (TornadoLauncherConfig and TornadoLauncherConfig.MAX_COLLECT_AMOUNT) or 150,
+	CooldownSeconds = (TornadoLauncherConfig and TornadoLauncherConfig.COOLDOWN_SECONDS) or 6,
+}
+
+-- ============================================================
+-- FEATHER PACKING BOT (new helper -- Gems or Robux, no Cash unlock, like Drone)
+-- ============================================================
+DisplayConfig.PackingBot = {
+	OneRoundRobux = (PackingBotConfig and PackingBotConfig.ONE_ROUND_ROBUX) or 40,
+	GemsCost = (PackingBotConfig and PackingBotConfig.ONE_ROUND_GEM_COST) or 45,
+	PermanentRobux = (PackingBotConfig and PackingBotConfig.PERMANENT_ROBUX) or 144,
+	Description = "Automatically collects feathers and sells them for you.",
+	Capacity = (PackingBotConfig and PackingBotConfig.CAPACITY) or 15,
 }
 
 -- ============================================================

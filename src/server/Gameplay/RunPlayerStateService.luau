@@ -19,7 +19,7 @@ local RunPlayerStateService = {}
 
 local states: { [number]: any } = {}
 
-local TOOL_NAMES = { "Pitchfork", "Dynamite", "Vacuum", "Drone" }
+local TOOL_NAMES = { "Pitchfork", "Dynamite", "Vacuum", "Drone", "FeatherGrabber", "TornadoLauncher", "PackingBot" }
 
 local function freshToolState(): any
 	return {

@@ -16,6 +16,7 @@
 -- isn't for the local player's own current run.
 
 local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Remotes = require(script.Parent.Parent.Net.Remotes)
 local PlayerState = require(script.Parent.Parent.State.PlayerState)
@@ -24,10 +25,34 @@ local PileController = {}
 
 local HEIGHT_PER_UNIT = 1
 local COLUMN_FOOTPRINT_SCALE = 0.9
-local FEATHER_COLOR = Color3.fromRGB(235, 225, 200)
+
+-- Real Feather asset (see ReplicatedStorage.SFTE_Assets -- a sibling of the
+-- Rojo-owned SearchForTheEgg tree, never synced/deleted by Rojo) replaces
+-- the old plain colored block. Still exactly one pooled instance per column,
+-- never per Feather -- see the header above for why that budget is fixed.
+local featherTemplate: MeshPart = ReplicatedStorage:WaitForChild("SFTE_Assets"):WaitForChild("Feather") :: MeshPart
+local FEATHER_NATURAL_SIZE = featherTemplate.Size
+
+-- A small, deterministic-per-column fraction rendered as a rare shimmering
+-- variant purely for pile ambience/flavor -- there is no per-unit "this
+-- Feather is Rainbow" state anywhere on the server (Rainbow Feather rewards
+-- are a plain count added to the bag on collection, see DynamiteService/
+-- VacuumService), so this never affects and is never driven by the actual
+-- Rainbow Feather economy roll.
+local RAINBOW_VISUAL_CHANCE = 0.04
+local RAINBOW_COLORS = {
+	Color3.fromRGB(255, 120, 160),
+	Color3.fromRGB(140, 200, 255),
+	Color3.fromRGB(190, 140, 255),
+	Color3.fromRGB(255, 210, 120),
+}
 
 local container: Folder? = nil
-local columnParts: { [string]: BasePart } = {}
+local columnParts: { [string]: MeshPart } = {}
+-- Per-column cosmetic jitter, rolled once when a column's Part is first
+-- created and reused on every later resize so a column's Feather doesn't
+-- re-randomize (and visibly snap/spin) every time its fill changes.
+local columnJitter: { [string]: { Yaw: number, Tilt: number, OffsetX: number, OffsetZ: number, ScaleJitter: number, Rainbow: boolean } } = {}
 local pileOrigin: Vector3? = nil
 local pileColumnSize = 4
 local currentPileRunId: string? = nil
@@ -36,21 +61,34 @@ local function columnKey(cx: number, cz: number): string
 	return cx .. "," .. cz
 end
 
+local function rollJitter(footprint: number)
+	return {
+		Yaw = math.random() * 360,
+		Tilt = (math.random() - 0.5) * 30,
+		OffsetX = (math.random() - 0.5) * footprint * 0.5,
+		OffsetZ = (math.random() - 0.5) * footprint * 0.5,
+		ScaleJitter = 0.85 + math.random() * 0.3,
+		Rainbow = math.random() < RAINBOW_VISUAL_CHANCE,
+	}
+end
+
 local function destroyPile()
 	if container then
 		container:Destroy()
 		container = nil
 	end
 	columnParts = {}
+	columnJitter = {}
 	pileOrigin = nil
 	currentPileRunId = nil
 end
 
-local function columnCFrame(cx: number, cz: number, height: number): CFrame
+local function columnCFrame(cx: number, cz: number, height: number, jitter): CFrame
 	local origin = pileOrigin :: Vector3
-	local worldX = origin.X + cx * pileColumnSize
-	local worldZ = origin.Z + cz * pileColumnSize
+	local worldX = origin.X + cx * pileColumnSize + jitter.OffsetX
+	local worldZ = origin.Z + cz * pileColumnSize + jitter.OffsetZ
 	return CFrame.new(worldX, origin.Y + height / 2, worldZ)
+		* CFrame.Angles(math.rad(jitter.Tilt), math.rad(jitter.Yaw), 0)
 end
 
 local function applyColumn(cx: number, cz: number, fill: number)
@@ -68,23 +106,39 @@ local function applyColumn(cx: number, cz: number, fill: number)
 	local height = math.max(0.05, fill * HEIGHT_PER_UNIT)
 	local footprint = pileColumnSize * COLUMN_FOOTPRINT_SCALE
 
+	local jitter = columnJitter[key]
+	if not jitter then
+		jitter = rollJitter(footprint)
+		columnJitter[key] = jitter
+	end
+
 	if not part then
-		part = Instance.new("Part")
+		part = featherTemplate:Clone()
 		part.Name = key
 		part.Anchored = true
 		part.CanCollide = false
 		part.CanQuery = false
 		part.CanTouch = false
 		part.CastShadow = false
-		part.Material = Enum.Material.Fabric
-		part.Color = FEATHER_COLOR
+		if jitter.Rainbow then
+			part.Color = RAINBOW_COLORS[math.random(1, #RAINBOW_COLORS)]
+			part.Material = Enum.Material.Neon
+			local sparkle = Instance.new("Sparkles")
+			sparkle.SparkleColor = part.Color
+			sparkle.Parent = part
+		end
 		part.Parent = container
 		columnParts[key] = part
 	end
 
+	-- Scale the Feather's own proportions up with pile height instead of
+	-- independently stretching X/Z/Y to fill the column footprint -- keeps
+	-- it reading as "a feather", never a squashed slab, while still growing
+	-- visibly denser/taller as the column fills.
+	local scale = math.clamp(0.6 + height / 6, 0.6, 2.4) * jitter.ScaleJitter
 	part.Transparency = 0
-	part.Size = Vector3.new(footprint, height, footprint)
-	part.CFrame = columnCFrame(cx, cz, height)
+	part.Size = FEATHER_NATURAL_SIZE * scale
+	part.CFrame = columnCFrame(cx, cz, height, jitter)
 end
 
 local function onPileSnapshot(payload: any)

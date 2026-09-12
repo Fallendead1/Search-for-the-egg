@@ -101,6 +101,18 @@ function SellService.RequestSell(player: Player)
 		RoundService.SendNotification(player, message, "Success")
 		RoundService.BroadcastPlayerState(player)
 
+		-- Cosmetic only: the sale above is already final (Bag emptied, Cash
+		-- credited) by the time this fires -- a conveyor-crate animation
+		-- client-side represents a completed sale, it never gates one. See
+		-- ConveyorVisualController.
+		RemotesLocator.Get("Gameplay_FX"):FireAllClients({
+			Type = "ConveyorSale",
+			UserId = player.UserId,
+			NormalCount = normalCount,
+			RainbowCount = rainbowCount,
+			SaleCents = saleCents,
+		})
+
 		return true
 	end)
 

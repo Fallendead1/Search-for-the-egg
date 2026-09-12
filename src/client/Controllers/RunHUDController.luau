@@ -22,7 +22,7 @@ local UIController, UpgradeBookController
 
 local RunHUDController = {}
 
-local TOOL_SLOTS = { "Hand", "Pitchfork", "Dynamite", "Drone", "Vacuum" }
+local TOOL_SLOTS = { "Hand", "Pitchfork", "Dynamite", "Drone", "Vacuum", "FeatherGrabber", "TornadoLauncher", "PackingBot" }
 
 -- tool:sub(1, 1) used to label every hotbar slot -- Dynamite and Drone both
 -- start with "D", so two of the five slots were visually identical.
@@ -32,6 +32,9 @@ local TOOL_HOTBAR_LABEL: { [string]: string } = {
 	Dynamite = "TNT",
 	Drone = "DRONE",
 	Vacuum = "VAC",
+	FeatherGrabber = "GRAB",
+	TornadoLauncher = "TORN",
+	PackingBot = "BOT",
 }
 
 local cashLabel: TextLabel
@@ -128,25 +131,35 @@ local function buildHotbar(parent: Instance)
 	hotbar.BackgroundTransparency = 1
 	hotbar.AnchorPoint = Vector2.new(0.5, 1)
 	hotbar.Position = UDim2.new(0.5, 0, 1, -16)
-	hotbar.Size = UDim2.new(0, 380, 0, 76)
+	-- Scale-based width (capped at a desktop max sized for the actual slot
+	-- count) so the hotbar always fits on narrow phones instead of
+	-- overflowing a fixed pixel width -- see RunHUDController's mobile
+	-- hotbar fix history for why this is scale-based, not fixed-width.
+	hotbar.Size = UDim2.new(0.94, 0, 0, 76)
 	hotbar.Parent = parent
+
+	local slotCount = #TOOL_SLOTS
+	local sizeConstraint = Instance.new("UISizeConstraint")
+	sizeConstraint.MaxSize = Vector2.new(math.clamp(slotCount * 62, 300, 640), 76)
+	sizeConstraint.Parent = hotbar
 
 	local layout = Instance.new("UIListLayout")
 	layout.FillDirection = Enum.FillDirection.Horizontal
 	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	layout.Padding = UDim.new(0, 8)
+	layout.Padding = UDim.new(0.012, 0)
 	layout.Parent = hotbar
 
+	local buttonScale = (1 - 0.012 * (slotCount - 1)) / slotCount
 	for _, tool in ipairs(TOOL_SLOTS) do
 		local button = Theme.newButton({
 			Text = TOOL_HOTBAR_LABEL[tool] or tool,
-			Size = UDim2.new(0, 64, 0, 64),
+			Size = UDim2.new(buttonScale, 0, 1, 0),
 			Parent = hotbar,
 		})
 		hotbarButtons[tool] = button
 		button.Activated:Connect(function()
 			InputController.selectTool(tool)
-			if tool == "Vacuum" or tool == "Drone" then
+			if tool == "Vacuum" or tool == "Drone" or tool == "PackingBot" then
 				InputController.toggleAutoTool(tool)
 			end
 		end)

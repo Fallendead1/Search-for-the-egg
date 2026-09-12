@@ -12,6 +12,8 @@ local GameplayConfig = ReplicatedStorage.SearchForTheEgg.GameplayConfig
 local RunConfig = require(GameplayConfig.RunConfig)
 local HandConfig = require(GameplayConfig.HandConfig)
 local PitchforkConfig = require(GameplayConfig.PitchforkConfig)
+local FeatherGrabberConfig = require(GameplayConfig.FeatherGrabberConfig)
+local TornadoLauncherConfig = require(GameplayConfig.TornadoLauncherConfig)
 
 local RemotesLocator = require(script.Parent.RemotesLocator)
 local RoundService = require(script.Parent.RoundService)
@@ -106,6 +108,18 @@ function CollectionService.RequestCollect(player: Player, toolName: string, targ
 		end
 		interval, baseAmount, searchRadius = pitchforkToolStats(state)
 		rangeLimit = RunConfig.RANGE.PITCHFORK
+	elseif toolName == "FeatherGrabber" then
+		if not ToolService.IsOwned(state, "FeatherGrabber") then
+			return
+		end
+		interval, baseAmount, searchRadius = FeatherGrabberConfig.ACTION_SECONDS, FeatherGrabberConfig.GRAB_AMOUNT, FeatherGrabberConfig.SEARCH_RADIUS_COLUMNS
+		rangeLimit = RunConfig.RANGE.FEATHER_GRABBER
+	elseif toolName == "TornadoLauncher" then
+		if not ToolService.IsOwned(state, "TornadoLauncher") then
+			return
+		end
+		interval, baseAmount, searchRadius = TornadoLauncherConfig.COOLDOWN_SECONDS, TornadoLauncherConfig.MAX_COLLECT_AMOUNT, TornadoLauncherConfig.SEARCH_RADIUS_COLUMNS
+		rangeLimit = RunConfig.RANGE.TORNADO_LAUNCHER
 	else
 		return
 	end

@@ -1,10 +1,13 @@
 --!strict
 -- UPGRADE BOOK: TAB on PC, on-screen Book button on mobile. Pages for
--- HAND / PITCHFORK / DYNAMITE / VACUUM / DRONE. Tool pages show a
--- purchase gate (Cash / One Round Robux / Permanent Robux) until the
--- server confirms ownership, then their upgrade-level tables. All
--- Cash-cost purchases go through Gameplay_RequestBuyRunUpgrade and are
--- never applied locally before the server confirms.
+-- HAND / PITCHFORK / DYNAMITE / VACUUM / DRONE / GRABBER (Feather Grabber) /
+-- TORNADO (Feather Tornado Launcher) / BOT (Feather Packing Bot). Tool pages
+-- show a purchase gate (Cash or Gems / One Round Robux / Permanent Robux)
+-- until the server confirms ownership, then either upgrade-level tables
+-- (Pitchfork/Dynamite/Vacuum/Drone) or a fixed-stat confirmation (the three
+-- new equipment items, which have no upgrade tracks). All Cash-cost
+-- purchases go through Gameplay_RequestBuyRunUpgrade and are never applied
+-- locally before the server confirms.
 
 local UserInputService = game:GetService("UserInputService")
 
@@ -22,7 +25,7 @@ local UIController
 
 local UpgradeBookController = {}
 
-local PAGES = { "HAND", "PITCHFORK", "DYNAMITE", "VACUUM", "DRONE" }
+local PAGES = { "HAND", "PITCHFORK", "DYNAMITE", "VACUUM", "DRONE", "GRABBER", "TORNADO", "BOT" }
 local currentPage = "HAND"
 
 -- Maps the UpgradeId used on the wire (and in DisplayConfig's per-stat
@@ -134,10 +137,11 @@ local function buildPurchaseGate(body: Instance, toolId: string, cashCostCents: 
 		MonetizationController.promptProduct(oneRoundKey)
 	end)
 
-	-- Drone's alternate one-round buy: Gems instead of Robux (see
-	-- ToolService.BuyDroneWithGems / Gameplay_RequestToolAction).
-	if toolId == "Drone" then
-		local gemsCost = DisplayConfig.Drone.GemsCost
+	-- Drone/Packing Bot's alternate one-round buy: Gems instead of Robux (see
+	-- ToolService.BuyDroneWithGems / BuyPackingBotWithGems).
+	local GEMS_BUY_ACTION: { [string]: string } = { Drone = "BuyDroneGems", PackingBot = "BuyPackingBotGems" }
+	if GEMS_BUY_ACTION[toolId] then
+		local gemsCost = DisplayConfig[toolId].GemsCost
 		local gemsAffordable = PlayerState.Run.InProgress and PlayerState.Profile.Gems >= gemsCost
 		local gemsButton = Theme.newButton({
 			Text = ("1 ROUND - %d GEMS"):format(gemsCost),
@@ -147,7 +151,7 @@ local function buildPurchaseGate(body: Instance, toolId: string, cashCostCents: 
 		})
 		Theme.setButtonEnabled(gemsButton, gemsAffordable)
 		gemsButton.Activated:Connect(function()
-			Remotes.fireServer("Gameplay_RequestToolAction", { Tool = "Drone", Action = "BuyDroneGems" })
+			Remotes.fireServer("Gameplay_RequestToolAction", { Tool = toolId, Action = GEMS_BUY_ACTION[toolId] })
 			SoundController.play("Upgrade")
 		end)
 	end
@@ -236,6 +240,18 @@ local function buildToolPage(body: Instance, toolId: string, description: string
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = scroll
 
+	if #stats == 0 then
+		-- Fixed-stat equipment (no upgrade tracks): confirm ownership instead
+		-- of showing an empty scroll.
+		Theme.newLabel({
+			Text = "OWNED -- " .. description,
+			Size = UDim2.new(1, -20, 0, 60),
+			Font = Theme.FontBody,
+			Parent = scroll,
+		})
+		return
+	end
+
 	buildStatRows(scroll, toolId, stats)
 end
 
@@ -310,6 +326,15 @@ local function buildPageInto(page: string, frame: Instance)
 			{ Id = "Grasp", Config = DisplayConfig.Drone.Grasp },
 			{ Id = "Capacity", Config = DisplayConfig.Drone.Capacity },
 		})
+	elseif page == "GRABBER" then
+		buildToolPage(frame, "FeatherGrabber", DisplayConfig.FeatherGrabber.Description,
+			("Grabs %d feathers at once, about every %.1fs."):format(DisplayConfig.FeatherGrabber.GrabAmount, DisplayConfig.FeatherGrabber.ActionSeconds), {})
+	elseif page == "TORNADO" then
+		buildToolPage(frame, "TornadoLauncher", DisplayConfig.TornadoLauncher.Description,
+			("Pulls up to %d feathers at once. %ds cooldown."):format(DisplayConfig.TornadoLauncher.MaxCollectAmount, DisplayConfig.TornadoLauncher.CooldownSeconds), {})
+	elseif page == "BOT" then
+		buildToolPage(frame, "PackingBot", DisplayConfig.PackingBot.Description,
+			("Carries up to %d feathers per trip, then sells automatically."):format(DisplayConfig.PackingBot.Capacity), {})
 	end
 end
 
@@ -385,7 +410,9 @@ function UpgradeBookController.open()
 
 		local tabButton = Theme.newButton({
 			Text = page,
-			Size = UDim2.new(0, 130, 1, 0),
+			-- Narrower than the original 130px now that there are 8 tabs
+			-- instead of 5 -- keeps the whole row from overflowing the book.
+			Size = UDim2.new(0, 95, 1, 0),
 			Parent = tabRow,
 		})
 		tabButtons[page] = tabButton

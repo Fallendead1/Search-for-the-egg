@@ -45,6 +45,8 @@ RunConfig.RANGE = {
 	FARMER_TURN_IN = 9,
 	SELL_STATION = 10,
 	RED_BUTTON = 8,
+	FEATHER_GRABBER = 12,
+	TORNADO_LAUNCHER = 18,
 }
 
 RunConfig.COLLECTION_COOLDOWN_GRACE_SECONDS = 0.05
@@ -98,6 +100,9 @@ RunConfig.ENTITLEMENTS = {
 	VacuumPermanent = "VacuumPermanent",
 	DronePermanent = "DronePermanent",
 	InfiniteBag = "InfiniteBag",
+	FeatherGrabberPermanent = "FeatherGrabberPermanent",
+	TornadoLauncherPermanent = "TornadoLauncherPermanent",
+	PackingBotPermanent = "PackingBotPermanent",
 }
 
 -- MonetizationService:RegisterRunProductGrant() keys, as named explicitly in
@@ -107,6 +112,9 @@ RunConfig.ONE_ROUND_PRODUCT_KEYS = {
 	Dynamite = "DynamiteOneRound",
 	Vacuum = "VacuumOneRound",
 	Drone = "DroneOneRound",
+	FeatherGrabber = "FeatherGrabberOneRound",
+	TornadoLauncher = "TornadoLauncherOneRound",
+	PackingBot = "PackingBotOneRound",
 }
 
 -- UFO secret red button easter egg.
@@ -125,12 +133,22 @@ RunConfig.TAGS = {
 	RedButton = "SFTE_RedButton",
 	Chicken = "SFTE_Chicken",
 	SafeEggFallback = "SFTE_EggFallbackSpot",
+	-- Where a party's characters are moved when their run actually starts
+	-- (see RoundService.startRunNow) -- the local same-server fallback has
+	-- no other way to get a player from the Lobby into the gameplay map.
+	ChapterSpawn = "SFTE_ChapterSpawn",
 	-- Lobby world hookups (see PartyPadService / client BagCounterController).
 	PartyPad = "SFTE_PartyPad",
 	BagUpgradeCounter = "SFTE_BagUpgradeCounter",
 	-- Physical Lobby NPC stands (see client LobbyPromptController).
 	ShopCounter = "SFTE_ShopCounter",
 	ClassCounter = "SFTE_ClassCounter",
+	-- Map2 conveyor sell system (see ConveyorSellService/ConveyorVisualController).
+	-- The deposit point is ALSO tagged SellStation above -- SellService's
+	-- existing atomic bag->cash flow is reused unchanged; these two tags only
+	-- tell the client where to render the crate/chicken cosmetics.
+	ConveyorDeposit = "SFTE_ConveyorDeposit",
+	ConveyorOutput = "SFTE_ConveyorOutput",
 }
 
 return RunConfig

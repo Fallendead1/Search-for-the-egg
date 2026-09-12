@@ -41,6 +41,9 @@ local PitchforkConfig = require(GameplayConfig.PitchforkConfig)
 local DynamiteConfig = require(GameplayConfig.DynamiteConfig)
 local VacuumConfig = require(GameplayConfig.VacuumConfig)
 local DroneConfig = require(GameplayConfig.DroneConfig)
+local FeatherGrabberConfig = require(GameplayConfig.FeatherGrabberConfig)
+local TornadoLauncherConfig = require(GameplayConfig.TornadoLauncherConfig)
+local PackingBotConfig = require(GameplayConfig.PackingBotConfig)
 local RunConfig = require(GameplayConfig.RunConfig)
 local ClassConfig = require(MetaConfig.ClassConfig)
 local ChestConfig = require(MetaConfig.ChestConfig)
@@ -317,13 +320,13 @@ for key, product in pairs(MonetizationConfig.DeveloperProducts) do
 	end
 end
 checkEqual("every Developer Product has Id/Kind fields", invalidProductCount, 0)
-checkEqual("Developer Product catalog has exactly 9 entries", (function()
+checkEqual("Developer Product catalog has exactly 12 entries", (function()
 	local count = 0
 	for _ in pairs(MonetizationConfig.DeveloperProducts) do
 		count += 1
 	end
 	return count
-end)(), 9)
+end)(), 12)
 
 local invalidPassCount = 0
 for key, pass in pairs(MonetizationConfig.GamePasses) do
@@ -333,13 +336,13 @@ for key, pass in pairs(MonetizationConfig.GamePasses) do
 	end
 end
 checkEqual("every Game Pass has Id/EntitlementKey fields", invalidPassCount, 0)
-checkEqual("Game Pass catalog has exactly 9 entries", (function()
+checkEqual("Game Pass catalog has exactly 12 entries", (function()
 	local count = 0
 	for _ in pairs(MonetizationConfig.GamePasses) do
 		count += 1
 	end
 	return count
-end)(), 9)
+end)(), 12)
 
 -- Permanent tool/perk unlocks are Game Passes (never receipted -- Roblox
 -- never sends a ProcessReceipt for a Game Pass), not Developer Products.
@@ -353,12 +356,18 @@ check("DronePermanent is a Game Pass, not a Developer Product", MonetizationConf
 check("FastRolls is a Game Pass, not a Developer Product", MonetizationConfig.GamePasses.FastRolls ~= nil)
 check("ClassLuck2x is a Game Pass, not a Developer Product", MonetizationConfig.GamePasses.ClassLuck2x ~= nil)
 check("ExtraClassSlot is a Game Pass, not a Developer Product", MonetizationConfig.GamePasses.ExtraClassSlot ~= nil)
+check("FeatherGrabberPermanent is a Game Pass, not a Developer Product", MonetizationConfig.GamePasses.FeatherGrabberPermanent ~= nil)
+check("TornadoLauncherPermanent is a Game Pass, not a Developer Product", MonetizationConfig.GamePasses.TornadoLauncherPermanent ~= nil)
+check("PackingBotPermanent is a Game Pass, not a Developer Product", MonetizationConfig.GamePasses.PackingBotPermanent ~= nil)
 
 -- One Round / Gems / Chest opens are Developer Products, never Game Passes.
 check("PitchforkRound is a Developer Product, not a Game Pass", MonetizationConfig.DeveloperProducts.PitchforkRound ~= nil)
 check("DynamiteRound is a Developer Product, not a Game Pass", MonetizationConfig.DeveloperProducts.DynamiteRound ~= nil)
 check("VacuumRound is a Developer Product, not a Game Pass", MonetizationConfig.DeveloperProducts.VacuumRound ~= nil)
 check("DroneRound is a Developer Product, not a Game Pass", MonetizationConfig.DeveloperProducts.DroneRound ~= nil)
+check("FeatherGrabberRound is a Developer Product, not a Game Pass", MonetizationConfig.DeveloperProducts.FeatherGrabberRound ~= nil)
+check("TornadoLauncherRound is a Developer Product, not a Game Pass", MonetizationConfig.DeveloperProducts.TornadoLauncherRound ~= nil)
+check("PackingBotRound is a Developer Product, not a Game Pass", MonetizationConfig.DeveloperProducts.PackingBotRound ~= nil)
 
 -- RunProduct ProductKey must match what ToolService.Init() actually
 -- registers (RunConfig.ONE_ROUND_PRODUCT_KEYS values) -- a mismatch here
@@ -371,6 +380,23 @@ checkEqual("VacuumRound.ProductKey matches ToolService registration",
 	MonetizationConfig.DeveloperProducts.VacuumRound.ProductKey, RunConfig.ONE_ROUND_PRODUCT_KEYS.Vacuum)
 checkEqual("DroneRound.ProductKey matches ToolService registration",
 	MonetizationConfig.DeveloperProducts.DroneRound.ProductKey, RunConfig.ONE_ROUND_PRODUCT_KEYS.Drone)
+checkEqual("FeatherGrabberRound.ProductKey matches ToolService registration",
+	MonetizationConfig.DeveloperProducts.FeatherGrabberRound.ProductKey, RunConfig.ONE_ROUND_PRODUCT_KEYS.FeatherGrabber)
+checkEqual("TornadoLauncherRound.ProductKey matches ToolService registration",
+	MonetizationConfig.DeveloperProducts.TornadoLauncherRound.ProductKey, RunConfig.ONE_ROUND_PRODUCT_KEYS.TornadoLauncher)
+checkEqual("PackingBotRound.ProductKey matches ToolService registration",
+	MonetizationConfig.DeveloperProducts.PackingBotRound.ProductKey, RunConfig.ONE_ROUND_PRODUCT_KEYS.PackingBot)
+
+-- These 6 new products/passes are deliberate Id=0 placeholders (Section 21:
+-- "Do NOT automatically create real Developer Products/Game Passes through
+-- Open Cloud in this milestone") -- assert that explicitly so a future pass
+-- filling them in has to consciously update this test, not silently drift.
+checkEqual("FeatherGrabberRound.Id is still a placeholder", MonetizationConfig.DeveloperProducts.FeatherGrabberRound.Id, 0)
+checkEqual("TornadoLauncherRound.Id is still a placeholder", MonetizationConfig.DeveloperProducts.TornadoLauncherRound.Id, 0)
+checkEqual("PackingBotRound.Id is still a placeholder", MonetizationConfig.DeveloperProducts.PackingBotRound.Id, 0)
+checkEqual("FeatherGrabberPermanent.Id is still a placeholder", MonetizationConfig.GamePasses.FeatherGrabberPermanent.Id, 0)
+checkEqual("TornadoLauncherPermanent.Id is still a placeholder", MonetizationConfig.GamePasses.TornadoLauncherPermanent.Id, 0)
+checkEqual("PackingBotPermanent.Id is still a placeholder", MonetizationConfig.GamePasses.PackingBotPermanent.Id, 0)
 
 -- ============================================================
 -- 12. Sale math (SellService.ComputeSaleCents is pure -- run/state
@@ -955,6 +981,115 @@ for _, reward in ipairs(ChestConfig.Rewards) do
 end
 
 -- ============================================================
+-- 33. Feather Grabber / Tornado Launcher config + ownership (new equipment,
+--     MAJOR GAMEPLAY/WORLD INTEGRATION UPDATE -- fixed-stat items, no
+--     upgrade levels, so this checks config sanity + ownership transitions
+--     rather than a leveled-track table like Pitchfork/Dynamite above)
+-- ============================================================
+suite("FeatherGrabberTornado")
+checkEqual("Feather Grabber unlock cost is $6.00", FeatherGrabberConfig.UNLOCK_COST_CENTS, 600)
+checkEqual("Feather Grabber grabs 16 at once", FeatherGrabberConfig.GRAB_AMOUNT, 16)
+checkEqual("Feather Grabber action time is 2.0s", FeatherGrabberConfig.ACTION_SECONDS, 2.0)
+checkEqual("Feather Tornado unlock cost is $75.00", TornadoLauncherConfig.UNLOCK_COST_CENTS, 7500)
+checkEqual("Feather Tornado collects up to 150", TornadoLauncherConfig.MAX_COLLECT_AMOUNT, 150)
+checkEqual("Feather Tornado cooldown is 6s", TornadoLauncherConfig.COOLDOWN_SECONDS, 6)
+
+local fakePlayerGrabber = { UserId = -900201 }
+local grabberState = RunPlayerStateService.InitPlayer(fakePlayerGrabber, "Normal")
+check("fresh Feather Grabber starts Locked", not ToolService.IsOwned(grabberState, "FeatherGrabber"))
+check("fresh Tornado Launcher starts Locked", not ToolService.IsOwned(grabberState, "TornadoLauncher"))
+check("fresh Packing Bot starts Locked", not ToolService.IsOwned(grabberState, "PackingBot"))
+
+-- ToolService.BuyUnlock/BuyPackingBotWithGems require a live run registered
+-- in RoundService's private registry (see this file's header on why that
+-- can't be safely faked here) -- so, like the existing ToolOwnership suite
+-- above, ownership transitions are exercised via direct state mutation, and
+-- only the "no active run" rejection path is exercised through the real
+-- function.
+local okBuyGrabberNoRun, grabberErr = ToolService.BuyUnlock(fakePlayerGrabber, "FeatherGrabber")
+check("Feather Grabber Cash unlock rejected with no active run", okBuyGrabberNoRun == false and grabberErr == "RoundNotActive")
+
+grabberState.Tools.FeatherGrabber.Ownership = "RunOwned"
+check("Feather Grabber owned after RunOwned", ToolService.IsOwned(grabberState, "FeatherGrabber"))
+grabberState.Tools.TornadoLauncher.Ownership = "PermanentOwned"
+check("Tornado Launcher owned after PermanentOwned", ToolService.IsOwned(grabberState, "TornadoLauncher"))
+
+-- Packing Bot has no Cash unlock path at all (Gems/Robux only, like Drone/
+-- Vacuum) -- BuyUnlock's RoundNotActive check runs first regardless of
+-- tool, so this fake (run-less) player can only prove the function doesn't
+-- error for an unrecognized-for-Cash tool; the "NoCashUnlockForTool" branch
+-- itself is unreachable without a live run, same limitation as above.
+local okBuyBotCash, botCashErr = ToolService.BuyUnlock(fakePlayerGrabber, "PackingBot")
+check("Packing Bot Cash unlock call doesn't error without a live run", okBuyBotCash == false and botCashErr == "RoundNotActive")
+
+-- ============================================================
+-- 34. Feather Packing Bot config + Gems purchase (generalized from
+--     Drone's BuyDroneWithGems -- see ToolService.buyToolWithGems)
+-- ============================================================
+suite("PackingBot")
+checkEqual("Packing Bot capacity is 15", PackingBotConfig.CAPACITY, 15)
+checkEqual("Packing Bot collects 2 per cycle", PackingBotConfig.COLLECT_PER_CYCLE, 2)
+checkEqual("Packing Bot travels at 8 studs/sec", PackingBotConfig.TRAVEL_STUDS_PER_SECOND, 8)
+checkEqual("Packing Bot Gems cost is 45", PackingBotConfig.ONE_ROUND_GEM_COST, 45)
+checkEqual("Packing Bot one-round Robux is 40", PackingBotConfig.ONE_ROUND_ROBUX, 40)
+checkEqual("Packing Bot permanent Robux is 144", PackingBotConfig.PERMANENT_ROBUX, 144)
+
+local fakePlayerBot = { UserId = -900202 }
+local botState = RunPlayerStateService.InitPlayer(fakePlayerBot, "Normal")
+local okGemsNoRun = ToolService.BuyPackingBotWithGems(fakePlayerBot)
+check("Packing Bot Gems buy rejected with no active run", okGemsNoRun == false)
+
+-- RemoveNear's Egg-protection path (isEggColumnExposed check, shared by
+-- every tool that digs into the pile -- Hand/Pitchfork/Vacuum/Drone/Feather
+-- Grabber/Tornado Launcher/Packing Bot all call the same function) is
+-- exercised by the existing EggStateMachine suite above; Packing Bot and the
+-- two new tools add no new pile-removal code path to re-test here.
+
+-- ============================================================
+-- 35. Conveyor sell system (Section 5: the sale itself must be atomic and
+--     complete BEFORE any cosmetic conveyor animation -- SellService.
+--     RequestSell already is that function; this checks the invariants that
+--     make the conveyor animation purely cosmetic rather than gating Cash)
+-- ============================================================
+suite("ConveyorSell")
+local fakePlayerSell = { UserId = -900203 }
+local sellState = RunPlayerStateService.InitPlayer(fakePlayerSell, "Normal")
+sellState.BagCount = 10
+sellState.RainbowInBag = 2
+local normalCleared, rainbowCleared = RunPlayerStateService.ClearBag(sellState)
+checkEqual("ClearBag empties BagCount", sellState.BagCount, 0)
+checkEqual("ClearBag empties RainbowInBag", sellState.RainbowInBag, 0)
+checkEqual("ClearBag returns correct normal count", normalCleared, 8)
+checkEqual("ClearBag returns correct rainbow count", rainbowCleared, 2)
+
+-- A second sell attempt on an already-emptied bag must find nothing to
+-- sell -- this is what makes a duplicate deposit (e.g. a double-click, or a
+-- retried request after a dropped ack) a no-op rather than a double payout.
+local normalAgain, rainbowAgain = RunPlayerStateService.ClearBag(sellState)
+checkEqual("clearing an already-empty bag returns 0 normal", normalAgain, 0)
+checkEqual("clearing an already-empty bag returns 0 rainbow", rainbowAgain, 0)
+
+local fakeRunForSale = { GoldenHarvestActive = false }
+local saleCents = SellService.ComputeSaleCents(fakeRunForSale, sellState, normalCleared, rainbowCleared)
+check("sale of a mixed bag computes a positive amount", saleCents > 0)
+checkEqual("selling the emptied bag again computes $0",
+	SellService.ComputeSaleCents(fakeRunForSale, sellState, normalAgain, rainbowAgain), 0)
+
+-- ============================================================
+-- 36. Teleport party metadata shape re-check against the new tool set --
+--     IsValidTeleportData doesn't enumerate tools at all (it only validates
+--     PartyId/ChapterId/Difficulty/Members), so adding 3 new equipment
+--     types must NOT change what a valid teleport payload looks like.
+-- ============================================================
+suite("TeleportToolIndependence")
+check("valid teleport payload is unaffected by the new tool roster", ChapterArrivalService.IsValidTeleportData({
+	PartyId = "debug-party-1",
+	ChapterId = "Chapter1",
+	Difficulty = "Normal",
+	Members = { 1, 2 },
+}))
+
+-- ============================================================
 -- Summary
 -- ============================================================
 print(("[DebugTests] %d passed, %d failed (%d total)"):format(passed, failed, passed + failed))
@@ -997,4 +1132,10 @@ print(table.concat({
 	"    network tick) -- the single-threaded-server reasoning that makes this safe is documented in each",
 	"    service's comments and was verified by code inspection, not by an actual two-client race",
 	"  - Mobile touch input feel and on-screen layout/bounds on a real small viewport",
+	"  - Feather Grabber/Tornado Launcher collection remotes and Packing Bot's PILE->COLLECT->SELL->RETURN",
+	"    cycle end-to-end (character position/range checks, real pile removal, real FX broadcasts) -- config",
+	"    values and ownership transitions ARE tested above (FeatherGrabberTornado/PackingBot suites)",
+	"  - The conveyor crate visual (ConveyorVisualController) and its pool/reuse behavior -- purely",
+	"    presentational, client-side, and cannot run in this server-only Studio-boot suite; SellService's",
+	"    atomic bag->cash flow it rides on top of IS tested above (ConveyorSell suite)",
 }, "\n"))
