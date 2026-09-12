@@ -167,27 +167,41 @@ local function buildPerkCard(parent: Instance, perk: any, layoutOrder: number)
 	local card = Theme.newPanel(perk.Id, parent)
 	card.LayoutOrder = layoutOrder
 
-	local iconArea = Instance.new("Frame")
-	iconArea.BackgroundTransparency = 1
-	iconArea.Size = UDim2.new(0, 48, 0, 48)
-	iconArea.Position = UDim2.new(0.5, 0, 0, 8)
-	iconArea.AnchorPoint = Vector2.new(0.5, 0)
-	iconArea.Parent = card
+	-- Final art (icon + title + 5 pip wells + UPGRADE footer baked in) when
+	-- available; falls back to the plain icon-placeholder card otherwise.
+	local cardArtId = AssetConfig.ShopPerkCards[perk.Id] or 0
+	if cardArtId ~= 0 then
+		card.BackgroundTransparency = 1
+		local art = Instance.new("ImageLabel")
+		art.Name = "Art"
+		art.BackgroundTransparency = 1
+		art.Size = UDim2.fromScale(1, 1)
+		art.Image = AssetConfig.image(cardArtId)
+		art.ScaleType = Enum.ScaleType.Fit
+		art.Parent = card
+	else
+		local iconArea = Instance.new("Frame")
+		iconArea.BackgroundTransparency = 1
+		iconArea.Size = UDim2.new(0, 48, 0, 48)
+		iconArea.Position = UDim2.new(0.5, 0, 0, 8)
+		iconArea.AnchorPoint = Vector2.new(0.5, 0)
+		iconArea.Parent = card
 
-	local icon = Instance.new("ImageLabel")
-	icon.BackgroundTransparency = 1
-	icon.Size = UDim2.fromScale(1, 1)
-	icon.Image = AssetConfig.image(AssetConfig.ToolIcons.Bag)
-	icon.Parent = iconArea
-	Theme.newLabel({ Text = "⭐", Size = UDim2.fromScale(1, 1), Font = Theme.Font, Parent = iconArea })
+		local icon = Instance.new("ImageLabel")
+		icon.BackgroundTransparency = 1
+		icon.Size = UDim2.fromScale(1, 1)
+		icon.Image = AssetConfig.image(AssetConfig.ToolIcons.Bag)
+		icon.Parent = iconArea
+		Theme.newLabel({ Text = "⭐", Size = UDim2.fromScale(1, 1), Font = Theme.Font, Parent = iconArea })
 
-	Theme.newLabel({
-		Text = perk.Name,
-		Size = UDim2.new(1, -8, 0, 24),
-		Position = UDim2.new(0, 4, 0, 60),
-		Font = Theme.FontBody,
-		Parent = card,
-	})
+		Theme.newLabel({
+			Text = perk.Name,
+			Size = UDim2.new(1, -8, 0, 24),
+			Position = UDim2.new(0, 4, 0, 60),
+			Font = Theme.FontBody,
+			Parent = card,
+		})
+	end
 
 	buildProgressDots(card, level, maxLevel, 88)
 
@@ -282,14 +296,28 @@ local function buildGemCards(parent: Instance)
 		local card = Theme.newPanel(pack.Id, column)
 		card.Size = UDim2.new(1, 0, 0, 92)
 		card.LayoutOrder = i
-		card.BackgroundColor3 = Theme.Colors.Gems
 
-		Theme.newLabel({
-			Text = ("%d GEMS"):format(pack.Gems),
-			Size = UDim2.new(1, 0, 0, 40),
-			Position = UDim2.new(0, 0, 0, 6),
-			Parent = card,
-		})
+		-- Final art (gem pile + count baked in, matching the real Gems100/
+		-- Gems400 Developer Products exactly) when available.
+		local cardArtId = AssetConfig.GemPackCards[pack.Id] or 0
+		if cardArtId ~= 0 then
+			card.BackgroundTransparency = 1
+			local art = Instance.new("ImageLabel")
+			art.Name = "Art"
+			art.BackgroundTransparency = 1
+			art.Size = UDim2.fromScale(1, 1)
+			art.Image = AssetConfig.image(cardArtId)
+			art.ScaleType = Enum.ScaleType.Fit
+			art.Parent = card
+		else
+			card.BackgroundColor3 = Theme.Colors.Gems
+			Theme.newLabel({
+				Text = ("%d GEMS"):format(pack.Gems),
+				Size = UDim2.new(1, 0, 0, 40),
+				Position = UDim2.new(0, 0, 0, 6),
+				Parent = card,
+			})
+		end
 
 		local hasProduct = MonetizationController.hasProduct(pack.Id)
 		local buyButton = Theme.newButton({

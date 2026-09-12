@@ -3,6 +3,8 @@
 -- slots, and Auto Roll. Every roll result comes from the server -- this
 -- controller only requests rolls and renders whatever comes back.
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
 local Theme = require(script.Parent.Parent.UI.Theme)
 local Overlay = require(script.Parent.Parent.UI.Components.Overlay)
 local Remotes = require(script.Parent.Parent.Net.Remotes)
@@ -11,6 +13,7 @@ local PlayerState = require(script.Parent.Parent.State.PlayerState)
 local CameraController = require(script.Parent.CameraController)
 local SoundController = require(script.Parent.SoundController)
 local MonetizationController = require(script.Parent.MonetizationController)
+local AssetConfig = require(ReplicatedStorage.SearchForTheEgg.AssetConfig)
 
 local UIController
 
@@ -155,55 +158,96 @@ local function buildClassRow(parent: Instance, class: any, layoutOrder: number, 
 	local row = Theme.newPanel(class.Id, parent)
 	row.Size = UDim2.new(1, 0, 0, 60)
 	row.LayoutOrder = layoutOrder
-	if class.Id == selectedClassId then
-		row.BackgroundColor3 = Theme.Colors.Background
+
+	-- Final art (icon + name + odds all baked in, matching ClassConfig.Odds/
+	-- DisplayName exactly) when available; falls back to the old flat panel
+	-- + accent bar + emoji + text row otherwise.
+	local cardArtId = AssetConfig.ClassCards[class.Id] or 0
+	if cardArtId ~= 0 then
+		row.BackgroundTransparency = 1
+		local art = Instance.new("ImageLabel")
+		art.Name = "Art"
+		art.BackgroundTransparency = 1
+		art.Size = UDim2.fromScale(1, 1)
+		art.Image = AssetConfig.image(cardArtId)
+		art.ScaleType = Enum.ScaleType.Stretch
+		art.Parent = row
+
+		if class.Id == selectedClassId then
+			local stroke = row:FindFirstChildOfClass("UIStroke")
+			if stroke then
+				stroke.Color = Theme.Colors.TextGold
+				stroke.Thickness = 3
+			end
+		end
+	else
+		if class.Id == selectedClassId then
+			row.BackgroundColor3 = Theme.Colors.Background
+		end
+
+		local accent = Instance.new("Frame")
+		accent.BackgroundColor3 = class.RarityColor
+		accent.BorderSizePixel = 0
+		accent.Size = UDim2.new(0, 6, 1, -8)
+		accent.Position = UDim2.new(0, 4, 0, 4)
+		accent.Parent = row
+		Theme.applyOutlineCorner(accent, 0, UDim.new(0, 3))
+
+		Theme.newLabel({
+			Text = CLASS_ICON_TEXT[class.Id] or "?",
+			Size = UDim2.new(0, 34, 0, 34),
+			Position = UDim2.new(0, 16, 0.5, 0),
+			AnchorPoint = Vector2.new(0, 0.5),
+			Font = Theme.Font,
+			Parent = row,
+		})
+
+		Theme.newLabel({
+			Text = class.Name,
+			Size = UDim2.new(1, -180, 0, 24),
+			Position = UDim2.new(0, 58, 0, 6),
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Font = Theme.FontBody,
+			Parent = row,
+		})
+		Theme.newLabel({
+			Text = ("%.1f%%"):format(class.Odds),
+			Size = UDim2.new(1, -180, 0, 20),
+			Position = UDim2.new(0, 58, 0, 30),
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextColor = Theme.Colors.TextDark,
+			Font = Theme.FontBody,
+			Parent = row,
+		})
 	end
 
-	local accent = Instance.new("Frame")
-	accent.BackgroundColor3 = class.RarityColor
-	accent.BorderSizePixel = 0
-	accent.Size = UDim2.new(0, 6, 1, -8)
-	accent.Position = UDim2.new(0, 4, 0, 4)
-	accent.Parent = row
-	Theme.applyOutlineCorner(accent, 0, UDim.new(0, 3))
-
-	Theme.newLabel({
-		Text = CLASS_ICON_TEXT[class.Id] or "?",
-		Size = UDim2.new(0, 34, 0, 34),
-		Position = UDim2.new(0, 16, 0.5, 0),
-		AnchorPoint = Vector2.new(0, 0.5),
-		Font = Theme.Font,
-		Parent = row,
-	})
-
-	Theme.newLabel({
-		Text = class.Name,
-		Size = UDim2.new(1, -180, 0, 24),
-		Position = UDim2.new(0, 58, 0, 6),
-		TextXAlignment = Enum.TextXAlignment.Left,
-		Font = Theme.FontBody,
-		Parent = row,
-	})
-	Theme.newLabel({
-		Text = ("%.1f%%"):format(class.Odds),
-		Size = UDim2.new(1, -180, 0, 20),
-		Position = UDim2.new(0, 58, 0, 30),
-		TextXAlignment = Enum.TextXAlignment.Left,
-		TextColor = Theme.Colors.TextDark,
-		Font = Theme.FontBody,
-		Parent = row,
-	})
-
-	local badgeText = equipped and "EQUIPPED" or (owned and "OWNED" or "LOCKED")
-	Theme.newLabel({
-		Text = badgeText,
-		Size = UDim2.new(0, 110, 0, 26),
-		Position = UDim2.new(1, -10, 0.5, 0),
-		AnchorPoint = Vector2.new(1, 0.5),
-		TextColor = equipped and Theme.Colors.ButtonSecondary or (owned and Theme.Colors.TextGold or Theme.Colors.Locked),
-		Font = Theme.FontBody,
-		Parent = row,
-	})
+	-- State badge: real art overlay (owned/equipped/locked) when available,
+	-- else the old text badge. Always the dynamic part, regardless of which
+	-- branch above ran.
+	local stateAssetId = equipped and AssetConfig.ClassStates.Equipped
+		or (owned and AssetConfig.ClassStates.Owned or AssetConfig.ClassStates.Locked)
+	if stateAssetId ~= 0 then
+		local badge = Instance.new("ImageLabel")
+		badge.Name = "StateBadge"
+		badge.BackgroundTransparency = 1
+		badge.Size = UDim2.new(0, 110, 0, 26)
+		badge.Position = UDim2.new(1, -10, 0.5, 0)
+		badge.AnchorPoint = Vector2.new(1, 0.5)
+		badge.Image = AssetConfig.image(stateAssetId)
+		badge.ScaleType = Enum.ScaleType.Fit
+		badge.Parent = row
+	else
+		local badgeText = equipped and "EQUIPPED" or (owned and "OWNED" or "LOCKED")
+		Theme.newLabel({
+			Text = badgeText,
+			Size = UDim2.new(0, 110, 0, 26),
+			Position = UDim2.new(1, -10, 0.5, 0),
+			AnchorPoint = Vector2.new(1, 0.5),
+			TextColor = equipped and Theme.Colors.ButtonSecondary or (owned and Theme.Colors.TextGold or Theme.Colors.Locked),
+			Font = Theme.FontBody,
+			Parent = row,
+		})
+	end
 
 	local hitButton = Instance.new("TextButton")
 	hitButton.BackgroundTransparency = 1
@@ -262,9 +306,85 @@ end
 -- Right description card: name, description, gold stat lines, and either
 -- EQUIP SLOT 1/2 controls (owned) or a ROLL TO GET prompt (not owned) --
 -- Sections 46-53/56.
+-- Only 4 of the 8 classes have description art wired in (see AssetConfig.
+-- ClassDescriptionCards' comment) -- for those, the image already bakes in
+-- name/description/stat-lines exactly, so this just anchors the same
+-- ROLL TO GET / EQUIP SLOT controls to the card's bottom "footer well"
+-- instead of rebuilding the (now redundant) text scroll.
+local function buildDescriptionCardFromArt(card: Instance, class: any, descArtId: number)
+	card.BackgroundTransparency = 1
+	local art = Instance.new("ImageLabel")
+	art.Name = "Art"
+	art.BackgroundTransparency = 1
+	art.Size = UDim2.fromScale(1, 1)
+	art.Image = AssetConfig.image(descArtId)
+	art.ScaleType = Enum.ScaleType.Fit
+	art.Parent = card
+
+	local owned = PlayerState.Profile.OwnedClasses[class.Id] == true
+	if not owned then
+		Theme.newButton({
+			Text = "ROLL TO GET",
+			Size = UDim2.new(1, -24, 0, 44),
+			Position = UDim2.new(0.5, 0, 1, -14),
+			AnchorPoint = Vector2.new(0.5, 1),
+			Color = Theme.Colors.ButtonDisabled,
+			Parent = card,
+		}).Active = false
+		return
+	end
+
+	local equippedSlot1 = PlayerState.Profile.EquippedClass == class.Id
+	local equippedSlot2 = PlayerState.Profile.SecondSlotUnlocked and PlayerState.Profile.SecondClass == class.Id
+
+	local footer = Instance.new("Frame")
+	footer.BackgroundTransparency = 1
+	footer.Size = UDim2.new(1, -24, 0, PlayerState.Profile.SecondSlotUnlocked and 92 or 44)
+	footer.Position = UDim2.new(0.5, 0, 1, -14)
+	footer.AnchorPoint = Vector2.new(0.5, 1)
+	footer.Parent = card
+
+	local footerLayout = Instance.new("UIListLayout")
+	footerLayout.Padding = UDim.new(0, 8)
+	footerLayout.Parent = footer
+
+	local slot1Button = Theme.newButton({
+		Text = equippedSlot1 and "SLOT 1: EQUIPPED" or "EQUIP SLOT 1",
+		Size = UDim2.new(1, 0, 0, 40),
+		Color = equippedSlot1 and Theme.Colors.ButtonSecondary or Theme.Colors.ButtonPrimary,
+		LayoutOrder = 1,
+		Parent = footer,
+	})
+	Theme.setButtonEnabled(slot1Button, not equippedSlot1 and not equippedSlot2)
+	slot1Button.Activated:Connect(function()
+		requestEquip(1, class.Id)
+	end)
+
+	if PlayerState.Profile.SecondSlotUnlocked then
+		local slot2Button = Theme.newButton({
+			Text = equippedSlot2 and "SLOT 2: EQUIPPED" or "EQUIP SLOT 2",
+			Size = UDim2.new(1, 0, 0, 40),
+			Color = equippedSlot2 and Theme.Colors.ButtonSecondary or Theme.Colors.ButtonPrimary,
+			LayoutOrder = 2,
+			Parent = footer,
+		})
+		Theme.setButtonEnabled(slot2Button, not equippedSlot2 and not equippedSlot1)
+		slot2Button.Activated:Connect(function()
+			requestEquip(2, class.Id)
+		end)
+	end
+end
+
 local function buildDescriptionCard(parent: Instance, class: any)
 	local card = Theme.newPanel("Description", parent)
 	card.Size = UDim2.fromScale(1, 1)
+
+	local descArtId = AssetConfig.ClassDescriptionCards[class.Id] or 0
+	if descArtId ~= 0 then
+		buildDescriptionCardFromArt(card, class, descArtId)
+		return
+	end
+
 	card.BackgroundColor3 = Color3.fromRGB(30, 28, 40)
 
 	local scroll = Overlay.newScroll(card)

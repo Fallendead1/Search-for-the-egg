@@ -13,7 +13,10 @@ BagConfig.LEVELS = {
 	[5] = { Capacity = 250, CostCents = 1000 },
 }
 
--- Class/permanent modifiers applied on top of the level capacity.
-BagConfig.PACK_MULE_CAPACITY_MULTIPLIER = 1.5
+-- Class/permanent modifiers applied on top of the level capacity. This is
+-- the ONE real number RunPlayerStateService.EffectiveBagCapacity uses for
+-- Pack Mule (ClassConfig.Classes.PackMule.BagCapacityMultiplier is a
+-- separate, currently-unused display value -- keep both in sync).
+BagConfig.PACK_MULE_CAPACITY_MULTIPLIER = 1.35
 
 return BagConfig

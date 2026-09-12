@@ -3,10 +3,13 @@
 -- Locked difficulties/chapters are always rendered from server-reported
 -- state (Gameplay_PartyState) -- this never locally decides an unlock.
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
 local Theme = require(script.Parent.Parent.UI.Theme)
 local Remotes = require(script.Parent.Parent.Net.Remotes)
 local DisplayConfig = require(script.Parent.Parent.Data.DisplayConfig)
 local PlayerState = require(script.Parent.Parent.State.PlayerState)
+local AssetConfig = require(ReplicatedStorage.SearchForTheEgg.AssetConfig)
 
 local PartyController = {}
 
@@ -42,6 +45,27 @@ local function renderChapterSelection()
 		local card = Theme.newPanel(chapter.Id, host)
 		card.Size = UDim2.new(0, 220, 1, 0)
 
+		-- Real map-preview art (Chapter1 only so far) sits behind everything
+		-- else so the name/COMING SOON/difficulty controls below still read
+		-- clearly on top of it.
+		local mapArtId = AssetConfig.PartyMapPreviews[chapter.Id] or 0
+		if mapArtId ~= 0 then
+			local art = Instance.new("ImageLabel")
+			art.Name = "Art"
+			art.BackgroundTransparency = 1
+			art.Size = UDim2.fromScale(1, 1)
+			art.Image = AssetConfig.image(mapArtId)
+			art.ScaleType = Enum.ScaleType.Crop
+			art.Parent = card
+
+			local caption = Instance.new("Frame")
+			caption.BackgroundColor3 = Color3.new(0, 0, 0)
+			caption.BackgroundTransparency = 0.4
+			caption.BorderSizePixel = 0
+			caption.Size = UDim2.new(1, 0, 0, 44)
+			caption.Parent = card
+		end
+
 		-- chapter.Locked is a permanent "not released yet" flag (only
 		-- Chapter2 sets it, alongside Enabled = false server-side and no
 		-- Difficulties table) -- entirely separate from the per-difficulty
@@ -53,7 +77,7 @@ local function renderChapterSelection()
 		Theme.newLabel({
 			Text = chapter.Name .. "\n" .. chapter.Subtitle,
 			Size = UDim2.new(1, 0, 0, 44),
-			TextColor = chapterLocked and Theme.Colors.Locked or Theme.Colors.TextDark,
+			TextColor = chapterLocked and Theme.Colors.Locked or Theme.Colors.TextLight,
 			Parent = card,
 		})
 
@@ -86,13 +110,33 @@ local function renderChapterSelection()
 				local difficultyLocked = (PlayerState.Profile.TotalWins or 0) < (difficulty.RequiresWins or 0)
 				local isSelected = selectedChapter == chapter.Id and selectedDifficulty == difficulty.Id
 
+				-- Final art bakes the difficulty's own label in, so when it's
+				-- available the button's text is cleared and LOCKED is shown
+				-- as a dimmed image instead of appended "(LOCKED)" text.
+				local diffArtId = AssetConfig.PartyDifficultyButtons[difficulty.Id] or 0
 				local diffButton = Theme.newButton({
-					Text = difficultyLocked and (difficulty.Name .. " (LOCKED)") or difficulty.Name,
+					Text = diffArtId ~= 0 and "" or (difficultyLocked and (difficulty.Name .. " (LOCKED)") or difficulty.Name),
 					Size = UDim2.new(0, 90, 1, 0),
 					Color = isSelected and Theme.Colors.ButtonSecondary
 						or (difficultyLocked and Theme.Colors.ButtonDisabled or Theme.Colors.ButtonPrimary),
 					Parent = diffRow,
 				})
+				if diffArtId ~= 0 then
+					local art = Instance.new("ImageLabel")
+					art.Name = "Art"
+					art.BackgroundTransparency = 1
+					art.Size = UDim2.fromScale(1, 1)
+					art.Image = AssetConfig.image(diffArtId)
+					art.ScaleType = Enum.ScaleType.Fit
+					art.ImageTransparency = difficultyLocked and 0.6 or 0
+					art.Parent = diffButton
+
+					local stroke = diffButton:FindFirstChildOfClass("UIStroke")
+					if stroke and isSelected then
+						stroke.Color = Theme.Colors.TextGold
+						stroke.Thickness = 3
+					end
+				end
 				Theme.setButtonEnabled(diffButton, not difficultyLocked)
 				diffButton.Activated:Connect(function()
 					if difficultyLocked then

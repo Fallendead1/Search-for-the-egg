@@ -54,79 +54,130 @@ local function buildCard(parent: Instance, entry: any, layoutOrder: number)
 	local isAvailable = isToday and canClaimNow
 	local isClaimed = not isToday and entry.Day < currentDay
 
-	local bgColor, outlineColor = cardColors(entry.Day, entry)
-
 	local card = Instance.new("Frame")
 	card.Name = "Day" .. entry.Day
 	card.LayoutOrder = layoutOrder
-	card.BackgroundColor3 = isClaimed and Color3.fromRGB(120, 120, 120) or bgColor
+	card.BackgroundTransparency = 1
 	card.BorderSizePixel = 0
-	local corner, stroke = Theme.applyOutlineCorner(card, 3)
-	stroke.Color = outlineColor
 	card.Parent = parent
 
-	Theme.newLabel({
-		Text = "DAY " .. entry.Day,
-		Size = UDim2.new(1, 0, 0, 28),
-		Position = UDim2.new(0, 0, 0, 6),
-		Parent = card,
-	})
+	-- Final art (day number/icon/amount all baked in, matching DAYS above
+	-- exactly) when available; falls back to the old flat-color/text card
+	-- for any day that doesn't have final art yet.
+	local cardArtId = AssetConfig.DailyRewardCards["Day" .. entry.Day] or 0
+	if cardArtId ~= 0 then
+		local art = Instance.new("ImageLabel")
+		art.Name = "Art"
+		art.BackgroundTransparency = 1
+		art.Size = UDim2.fromScale(1, 1)
+		art.Image = AssetConfig.image(cardArtId)
+		art.ScaleType = Enum.ScaleType.Fit
+		art.Parent = card
+	else
+		local bgColor, outlineColor = cardColors(entry.Day, entry)
+		card.BackgroundTransparency = 0
+		card.BackgroundColor3 = isClaimed and Color3.fromRGB(120, 120, 120) or bgColor
+		local _corner, stroke = Theme.applyOutlineCorner(card, 3)
+		stroke.Color = outlineColor
 
-	local iconArea = Instance.new("Frame")
-	iconArea.BackgroundTransparency = 1
-	iconArea.Size = UDim2.new(0.7, 0, 0, 60)
-	iconArea.Position = UDim2.new(0.5, 0, 0, 36)
-	iconArea.AnchorPoint = Vector2.new(0.5, 0)
-	iconArea.Parent = card
+		Theme.newLabel({
+			Text = "DAY " .. entry.Day,
+			Size = UDim2.new(1, 0, 0, 28),
+			Position = UDim2.new(0, 0, 0, 6),
+			Parent = card,
+		})
 
-	-- Ready for a future asset id (AssetConfig.DailyRewardIcons) -- blank
-	-- until then, with a text glyph fallback so the card never looks empty.
-	local iconId = entry.Premium and AssetConfig.DailyRewardIcons.PremiumChest
-		or entry.Milestone and AssetConfig.DailyRewardIcons.Chest
-		or AssetConfig.DailyRewardIcons.Gem
-	local icon = Instance.new("ImageLabel")
-	icon.BackgroundTransparency = 1
-	icon.Size = UDim2.fromScale(1, 1)
-	icon.Image = AssetConfig.image(iconId)
-	icon.Parent = iconArea
+		local iconArea = Instance.new("Frame")
+		iconArea.BackgroundTransparency = 1
+		iconArea.Size = UDim2.new(0.7, 0, 0, 60)
+		iconArea.Position = UDim2.new(0.5, 0, 0, 36)
+		iconArea.AnchorPoint = Vector2.new(0.5, 0)
+		iconArea.Parent = card
 
-	Theme.newLabel({
-		Text = entry.Milestone and "🎁" or "💎",
-		Size = UDim2.fromScale(1, 1),
-		Font = Theme.Font,
-		Parent = iconArea,
-	})
+		local iconId = entry.Premium and AssetConfig.DailyRewardIcons.PremiumChest
+			or entry.Milestone and AssetConfig.DailyRewardIcons.Chest
+			or AssetConfig.DailyRewardIcons.Gem
+		local icon = Instance.new("ImageLabel")
+		icon.BackgroundTransparency = 1
+		icon.Size = UDim2.fromScale(1, 1)
+		icon.Image = AssetConfig.image(iconId)
+		icon.Parent = iconArea
 
-	Theme.newLabel({
-		Text = ("+%d Gems"):format(entry.Gems),
-		Size = UDim2.new(1, 0, 0, 26),
-		Position = UDim2.new(0, 0, 0, 100),
-		TextColor = isClaimed and Theme.Colors.TextLight or Theme.Colors.TextDark,
-		Parent = card,
-	})
+		Theme.newLabel({
+			Text = entry.Milestone and "🎁" or "💎",
+			Size = UDim2.fromScale(1, 1),
+			Font = Theme.Font,
+			Parent = iconArea,
+		})
 
-	local button = Theme.newButton({
-		Text = isClaimed and "CLAIMED" or (isAvailable and "CLAIM" or "LOCKED"),
-		Size = UDim2.new(1, -16, 0, 36),
-		Position = UDim2.new(0.5, 0, 1, -10),
-		AnchorPoint = Vector2.new(0.5, 1),
-		Color = Theme.Colors.ButtonSecondary,
-		Parent = card,
-	})
-	Theme.setButtonEnabled(button, isAvailable)
-	if isClaimed then
-		-- Checkmark-style completed state -- distinct from "locked" even
-		-- though both render as a disabled button.
-		button.Text = "CLAIMED  ✓"
-		button.BackgroundColor3 = Color3.fromRGB(90, 90, 90)
-		button.Active = false
+		Theme.newLabel({
+			Text = ("+%d Gems"):format(entry.Gems),
+			Size = UDim2.new(1, 0, 0, 26),
+			Position = UDim2.new(0, 0, 0, 100),
+			TextColor = isClaimed and Theme.Colors.TextLight or Theme.Colors.TextDark,
+			Parent = card,
+		})
 	end
-	button.Activated:Connect(function()
-		if not isAvailable then
-			return
+
+	if isClaimed then
+		-- Art doesn't have its own "claimed" tint -- a translucent dark
+		-- overlay reads as dimmed/done without needing a separate asset.
+		local dim = Instance.new("Frame")
+		dim.Name = "ClaimedDim"
+		dim.BackgroundColor3 = Color3.new(0, 0, 0)
+		dim.BackgroundTransparency = 0.45
+		dim.BorderSizePixel = 0
+		dim.Size = UDim2.fromScale(1, 1)
+		dim.ZIndex = 2
+		Theme.applyOutlineCorner(dim, 0)
+		dim.Parent = card
+	end
+
+	local stateAssetId = isClaimed and AssetConfig.DailyRewardStates.Claimed
+		or (isAvailable and AssetConfig.DailyRewardStates.Claim or AssetConfig.DailyRewardStates.Locked)
+
+	if stateAssetId ~= 0 then
+		local button = Instance.new("ImageButton")
+		button.Name = "StateButton"
+		button.BackgroundTransparency = 1
+		button.Image = AssetConfig.image(stateAssetId)
+		button.ScaleType = Enum.ScaleType.Fit
+		button.Size = UDim2.new(0.86, 0, 0, 40)
+		button.Position = UDim2.new(0.5, 0, 1, -8)
+		button.AnchorPoint = Vector2.new(0.5, 1)
+		button.ZIndex = 3
+		button.Active = isAvailable
+		button.Parent = card
+		button.Activated:Connect(function()
+			if not isAvailable then
+				return
+			end
+			Remotes.fireServer("Core_RequestClaimDailyReward")
+		end)
+	else
+		local button = Theme.newButton({
+			Text = isClaimed and "CLAIMED" or (isAvailable and "CLAIM" or "LOCKED"),
+			Size = UDim2.new(1, -16, 0, 36),
+			Position = UDim2.new(0.5, 0, 1, -10),
+			AnchorPoint = Vector2.new(0.5, 1),
+			Color = Theme.Colors.ButtonSecondary,
+			Parent = card,
+		})
+		Theme.setButtonEnabled(button, isAvailable)
+		if isClaimed then
+			-- Checkmark-style completed state -- distinct from "locked" even
+			-- though both render as a disabled button.
+			button.Text = "CLAIMED  ✓"
+			button.BackgroundColor3 = Color3.fromRGB(90, 90, 90)
+			button.Active = false
 		end
-		Remotes.fireServer("Core_RequestClaimDailyReward")
-	end)
+		button.Activated:Connect(function()
+			if not isAvailable then
+				return
+			end
+			Remotes.fireServer("Core_RequestClaimDailyReward")
+		end)
+	end
 
 	return card
 end

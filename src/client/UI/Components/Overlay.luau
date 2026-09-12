@@ -3,6 +3,8 @@
 -- the Book, Inventory, Shop, Classes, Alien Chest, Codes, and Stats
 -- overlays so they all open/close consistently on PC and mobile.
 
+local TweenService = game:GetService("TweenService")
+
 local Theme = require(script.Parent.Parent.Theme)
 
 local Overlay = {}
@@ -14,13 +16,22 @@ export type OverlayHandle = {
 }
 
 function Overlay.new(title: string, size: UDim2?): OverlayHandle
+	local targetSize = size or UDim2.new(0.85, 0, 0.85, 0)
+
 	local frame = Instance.new("Frame")
 	frame.Name = title .. "Overlay"
 	frame.AnchorPoint = Vector2.new(0.5, 0.5)
 	frame.Position = UDim2.fromScale(0.5, 0.5)
-	frame.Size = size or UDim2.new(0.85, 0, 0.85, 0)
+	-- Pop-in polish: start a touch smaller than the target size (same anchor
+	-- point, so it scales from center) and tween up -- every overlay built on
+	-- this shell (Shop/Classes/Stats/DailyRewards/etc) gets this for free.
+	frame.Size = UDim2.new(targetSize.X.Scale * 0.88, targetSize.X.Offset * 0.88, targetSize.Y.Scale * 0.88, targetSize.Y.Offset * 0.88)
 	frame.BackgroundColor3 = Theme.Colors.Background
 	Theme.applyOutlineCorner(frame, 4)
+
+	TweenService:Create(frame, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Size = targetSize,
+	}):Play()
 
 	local titleBar = Theme.newPanel("TitleBar", frame)
 	titleBar.Size = UDim2.new(1, 0, 0, 56)

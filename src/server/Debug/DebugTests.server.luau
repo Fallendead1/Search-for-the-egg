@@ -254,8 +254,8 @@ for _, odd in ipairs(ClassConfig.Odds) do
 end
 checkEqual("class odds sum to 100", oddsTotal, 100)
 
-checkEqual("Pack Mule bag capacity multiplier", ClassConfig.Classes.PackMule.BagCapacityMultiplier, 1.5)
-checkEqual("Feather Merchant sale multiplier", ClassConfig.Classes.FeatherMerchant.SaleMultiplier, 1.2)
+checkEqual("Pack Mule bag capacity multiplier", ClassConfig.Classes.PackMule.BagCapacityMultiplier, 1.35)
+checkEqual("Feather Merchant sale multiplier", ClassConfig.Classes.FeatherMerchant.SaleMultiplier, 1.25)
 checkEqual("Forkmaster pitchfork yield multiplier", ClassConfig.Classes.Forkmaster.PitchforkYieldMultiplier, 1.25)
 checkEqual("Forkmaster upgrade cost multiplier", ClassConfig.Classes.Forkmaster.PitchforkUpgradeCostMultiplier, 0.75)
 checkEqual("Demolitionist radius multiplier", ClassConfig.Classes.Demolitionist.DynamiteRadiusMultiplier, 1.2)
@@ -415,7 +415,7 @@ checkEqual("24 normal + 1 Rainbow (reported bug repro)", SellService.ComputeSale
 checkEqual("0 feathers sells for 0", SellService.ComputeSaleCents(baseRun, baseState, 0, 0), 0)
 
 local featherMerchantState = { Modifiers = { SaleMultiplier = ClassConfig.Classes.FeatherMerchant.SaleMultiplier } }
-checkEqual("Feather Merchant +20% on 100 normal", SellService.ComputeSaleCents(baseRun, featherMerchantState, 100, 0), 120)
+checkEqual("Feather Merchant +25% on 100 normal", SellService.ComputeSaleCents(baseRun, featherMerchantState, 100, 0), 125)
 
 local goldenHarvestRun = { GoldenHarvestActive = true }
 checkEqual("Golden Harvest 2x on 10 normal", SellService.ComputeSaleCents(goldenHarvestRun, baseState, 10, 0), 20)
@@ -431,7 +431,7 @@ end
 
 checkEqual("base (L0) capacity", RunPlayerStateService.EffectiveBagCapacity(fakeState(0)), 25)
 checkEqual("L5 capacity", RunPlayerStateService.EffectiveBagCapacity(fakeState(5)), 250)
-checkEqual("Pack Mule +50% at L0", RunPlayerStateService.EffectiveBagCapacity(fakeState(0, { PackMule = true })), 37) -- floor(25 * 1.5)
+checkEqual("Pack Mule +35% at L0", RunPlayerStateService.EffectiveBagCapacity(fakeState(0, { PackMule = true })), 33) -- floor(25 * 1.35)
 checkEqual(
 	"permanent Bag perk flat bonus (+50 at L0)",
 	RunPlayerStateService.EffectiveBagCapacity(fakeState(0, { BagFlatBonus = 50 })),
@@ -540,7 +540,7 @@ suite("ClassRollConfig")
 checkEqual("roll cost Gems", ClassConfig.RollCostGems, 40)
 checkEqual("base roll cooldown", ClassConfig.BaseRollCooldownSeconds, 1.5)
 checkEqual("Fast Rolls cooldown", ClassConfig.FastRollCooldownSeconds, 0.5)
-checkEqual("2x Luck weight threshold", ClassConfig.LuckWeightThreshold, 10)
+checkEqual("2x Luck weight threshold", ClassConfig.LuckWeightThreshold, 11)
 checkEqual("2x Luck multiplier", ClassConfig.LuckMultiplier, 2)
 
 -- ============================================================
@@ -555,14 +555,15 @@ for _, odd in ipairs(ClassConfig.Odds) do
 end
 
 local weightsLuck, totalLuck = ClassService.GetRollWeights(true)
--- Hand-computed from ClassConfig.Odds: entries with base weight <= 10 are
--- doubled (Forkmaster 9->18, Demolitionist 7->14, Prospector 3.9->7.8,
--- DroneSpecialist 1->2, UltimateFarmer 0.1->0.2); Starter/PackMule/Feather
--- Merchant (all > 10) stay at 40/25/14. New total: 40+25+14+18+14+7.8+2+0.2.
-checkEqual("2x Luck total", totalLuck, 121)
-checkEqual("2x Luck doubles Forkmaster (9 -> 18)", weightsLuck.Forkmaster, 18)
-checkEqual("2x Luck doubles UltimateFarmer (0.1 -> 0.2)", weightsLuck.UltimateFarmer, 0.2)
-checkEqual("2x Luck leaves Starter unchanged (> threshold)", weightsLuck.Starter, 40)
+-- Hand-computed from ClassConfig.Odds: entries with base weight <= 11 are
+-- doubled (Forkmaster 11->22, Demolitionist 7->14, Prospector 4->8,
+-- DroneSpecialist 1.7->3.4, UltimateFarmer 0.3->0.6); Starter/PackMule/
+-- FeatherMerchant (all > 11) stay at 35/25/16. New total:
+-- 35+25+16+22+14+8+3.4+0.6.
+checkEqual("2x Luck total", totalLuck, 124)
+checkEqual("2x Luck doubles Forkmaster (11 -> 22)", weightsLuck.Forkmaster, 22)
+checkEqual("2x Luck doubles UltimateFarmer (0.3 -> 0.6)", weightsLuck.UltimateFarmer, 0.6)
+checkEqual("2x Luck leaves Starter unchanged (> threshold)", weightsLuck.Starter, 35)
 checkEqual("2x Luck leaves PackMule unchanged (> threshold)", weightsLuck.PackMule, 25)
 
 local allPositiveAndAccounted = true

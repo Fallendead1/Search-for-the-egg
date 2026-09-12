@@ -4,6 +4,8 @@
 -- pad (built by PartyController).
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
 local Theme = require(script.Parent.Parent.UI.Theme)
 local Remotes = require(script.Parent.Parent.Net.Remotes)
@@ -13,6 +15,7 @@ local Format = require(script.Parent.Parent.Util.Format)
 local SoundController = require(script.Parent.SoundController)
 local MonetizationController = require(script.Parent.MonetizationController)
 local PartyController = require(script.Parent.PartyController)
+local AssetConfig = require(ReplicatedStorage.SearchForTheEgg.AssetConfig)
 
 local UIController, StatsController, InventoryController, CodesController, ShopController, ClassController, ChestController, DailyRewardController
 
@@ -145,26 +148,43 @@ local function buildSideMenu(parent: Instance)
 		card.Size = UDim2.new(1, 0, 0, 102)
 		card.LayoutOrder = i
 
-		local iconArea = Theme.newPanel(name .. "Icon", card)
-		iconArea.Size = UDim2.new(0, 64, 0, 64)
-		iconArea.Position = UDim2.new(0.5, 0, 0, 6)
-		iconArea.AnchorPoint = Vector2.new(0.5, 0)
-		iconArea.BackgroundColor3 = Theme.Colors.ButtonPrimary
-		Theme.newLabel({
-			Text = SIDE_MENU_ICON_TEXT[name] or "?",
-			Size = UDim2.fromScale(1, 1),
-			Font = Theme.Font,
-			Parent = iconArea,
-		})
+		-- Final art bakes icon + label into one image per tile; falls back to
+		-- the old icon-square + text label if a tile's art isn't ready yet.
+		local cardArtId = AssetConfig.SideMenuCards[name] or 0
+		local art: ImageLabel? = nil
+		if cardArtId ~= 0 then
+			card.BackgroundTransparency = 1
+			art = Instance.new("ImageLabel")
+			art.Name = "Art"
+			art.BackgroundTransparency = 1
+			art.Size = UDim2.fromScale(1, 1)
+			art.AnchorPoint = Vector2.new(0.5, 0.5)
+			art.Position = UDim2.fromScale(0.5, 0.5)
+			art.Image = AssetConfig.image(cardArtId)
+			art.ScaleType = Enum.ScaleType.Fit
+			art.Parent = card
+		else
+			local iconArea = Theme.newPanel(name .. "Icon", card)
+			iconArea.Size = UDim2.new(0, 64, 0, 64)
+			iconArea.Position = UDim2.new(0.5, 0, 0, 6)
+			iconArea.AnchorPoint = Vector2.new(0.5, 0)
+			iconArea.BackgroundColor3 = Theme.Colors.ButtonPrimary
+			Theme.newLabel({
+				Text = SIDE_MENU_ICON_TEXT[name] or "?",
+				Size = UDim2.fromScale(1, 1),
+				Font = Theme.Font,
+				Parent = iconArea,
+			})
 
-		Theme.newLabel({
-			Text = name,
-			Size = UDim2.new(1, -8, 0, 24),
-			Position = UDim2.new(0.5, 0, 1, -28),
-			AnchorPoint = Vector2.new(0.5, 0),
-			Font = Theme.FontBody,
-			Parent = card,
-		})
+			Theme.newLabel({
+				Text = name,
+				Size = UDim2.new(1, -8, 0, 24),
+				Position = UDim2.new(0.5, 0, 1, -28),
+				AnchorPoint = Vector2.new(0.5, 0),
+				Font = Theme.FontBody,
+				Parent = card,
+			})
+		end
 
 		-- The whole card is clickable (not just a small button inside it) --
 		-- matches the reference's "tap anywhere on the tile" feel and gives
@@ -175,10 +195,18 @@ local function buildSideMenu(parent: Instance)
 		hitButton.Size = UDim2.fromScale(1, 1)
 		hitButton.Parent = card
 		hitButton.MouseEnter:Connect(function()
-			card.BackgroundColor3 = Theme.Colors.Background
+			if art then
+				TweenService:Create(art, TweenInfo.new(0.12, Enum.EasingStyle.Sine), { Size = UDim2.fromScale(1.06, 1.06) }):Play()
+			else
+				card.BackgroundColor3 = Theme.Colors.Background
+			end
 		end)
 		hitButton.MouseLeave:Connect(function()
-			card.BackgroundColor3 = Theme.Colors.PanelFill
+			if art then
+				TweenService:Create(art, TweenInfo.new(0.12, Enum.EasingStyle.Sine), { Size = UDim2.fromScale(1, 1) }):Play()
+			else
+				card.BackgroundColor3 = Theme.Colors.PanelFill
+			end
 		end)
 		hitButton.Activated:Connect(function()
 			SoundController.play("ButtonClick")
