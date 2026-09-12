@@ -61,8 +61,7 @@ RunConfig.DIFFICULTY = {
 		Id = "Normal",
 		RequiresWins = 0,
 		PileScale = 1.0,
-		ColumnDepthMin = 6,
-		ColumnDepthMax = 10,
+		ColumnDepthMax = 24,
 		EggMinDepthFraction = 0.45,
 		EggMaxDepthFraction = 0.85,
 	},
@@ -70,8 +69,7 @@ RunConfig.DIFFICULTY = {
 		Id = "Hard",
 		RequiresWins = 1,
 		PileScale = 1.5,
-		ColumnDepthMin = 9,
-		ColumnDepthMax = 15,
+		ColumnDepthMax = 34,
 		EggMinDepthFraction = 0.65,
 		EggMaxDepthFraction = 0.95,
 	},
@@ -85,10 +83,18 @@ RunConfig.CHAPTERS = {
 	Chapter2 = { Id = "Chapter2", RequiresWins = 1, Enabled = false },
 }
 
--- Feather pile grid (see FeatherPileService for usage).
+-- Feather pile grid (see FeatherPileService for usage). Kept compact and
+-- tight-packed on purpose -- this is a HEIGHT MOUND, not a field: a wide,
+-- sparse grid with a shallow peak reads as scattered debris, not "one giant
+-- pile" (see FeatherPileService.domeColumnMaxFill for the actual dome
+-- profile that uses these). Radius is sized to fit inside Map2's ~39-stud
+-- GroundPit (the recessed patch of ground clearly built to hold the pile) --
+-- the pile previously ran 3x wider than that pit, which is why it sprawled
+-- over the Chicken coop and other nearby scenery instead of reading as one
+-- contained mound.
 RunConfig.PILE = {
-	COLUMN_SIZE_STUDS = 4,
-	GRID_RADIUS_COLUMNS = 16, -- produces a (2r+1) x (2r+1) column grid
+	COLUMN_SIZE_STUDS = 3,
+	GRID_RADIUS_COLUMNS = 6, -- produces a (2r+1) x (2r+1) column grid
 }
 
 -- MonetizationService:OwnsEntitlement() keys for permanent tool ownership /

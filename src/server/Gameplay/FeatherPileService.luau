@@ -35,8 +35,26 @@ local function columnKey(cx: number, cz: number): string
 	return cx .. "," .. cz
 end
 
-local function randomColumnMaxFill(difficulty): number
-	return math.random(difficulty.ColumnDepthMin, difficulty.ColumnDepthMax)
+-- Dome height profile: MaxFill peaks at the center column and tapers smoothly
+-- to exactly 0 at (and beyond) the circle inscribed in the square (cx, cz)
+-- grid -- this is what turns the pile into one round mound with a tall
+-- center and clean edges instead of a uniform square field of feathers
+-- reaching all the way to the corners (the previous behavior, and the bug
+-- reported as "feathers scattered all over the map").
+local function domeColumnMaxFill(cx: number, cz: number, gridRadius: number, difficulty): number
+	local normalizedDistance = math.sqrt(cx * cx + cz * cz) / gridRadius
+	if normalizedDistance >= 1 then
+		return 0
+	end
+	-- Cosine falloff, squared: 1.0 at the center, 0.0 at the rim, but steeper
+	-- than a plain cosine so height concentrates toward the middle instead of
+	-- spreading thin across the whole radius -- a flat, wide, gently-sloped
+	-- profile is exactly what read as "scattered across the map" instead of
+	-- "one heaped pile".
+	local heightFraction = math.cos(normalizedDistance * (math.pi / 2)) ^ 2
+	local jitter = 0.82 + math.random() * 0.36
+	local depth = difficulty.ColumnDepthMax * heightFraction * jitter
+	return math.max(0, math.floor(depth + 0.5))
 end
 
 -- Builds a fresh pile for a run. `run` just needs to be a stable table we can
@@ -63,7 +81,7 @@ function FeatherPileService.BuildForRun(run: any, difficultyId: string)
 
 	for cx = -gridRadius, gridRadius do
 		for cz = -gridRadius, gridRadius do
-			local maxFill = randomColumnMaxFill(difficulty)
+			local maxFill = domeColumnMaxFill(cx, cz, gridRadius, difficulty)
 			pile.Columns[columnKey(cx, cz)] = {
 				CX = cx,
 				CZ = cz,
@@ -95,12 +113,14 @@ function FeatherPileService.GetColumn(pile: any, cx: number, cz: number)
 end
 
 -- Assigns the Egg to a column, biased toward the interior of the grid so it
--- can never be exposed by a single edge dig. Returns the world position the
--- Egg should visually sit at.
+-- can never be exposed by a single edge dig. Since BuildForRun now tapers
+-- MaxFill down to 0 at the rim (the dome profile), this has to stay close to
+-- the center or risk landing in a column too shallow to actually bury the
+-- Egg under -- 40% of the radius keeps it inside the dome's genuinely tall
+-- interior.
 function FeatherPileService.AssignEggColumn(pile: any): (Vector3, number, number)
 	local difficulty = pile.Difficulty
-	local margin = math.max(2, math.floor(pile.GridRadius * 0.25))
-	local innerRadius = math.max(1, pile.GridRadius - margin)
+	local innerRadius = math.max(1, math.floor(pile.GridRadius * 0.4))
 
 	local cx = math.random(-innerRadius, innerRadius)
 	local cz = math.random(-innerRadius, innerRadius)

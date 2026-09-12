@@ -7,7 +7,6 @@ local Theme = require(script.Parent.Parent.UI.Theme)
 local Remotes = require(script.Parent.Parent.Net.Remotes)
 local DisplayConfig = require(script.Parent.Parent.Data.DisplayConfig)
 local PlayerState = require(script.Parent.Parent.State.PlayerState)
-local SoundController = require(script.Parent.SoundController)
 
 local PartyController = {}
 
@@ -23,28 +22,6 @@ local function clearContent()
 	for _, child in ipairs(contentHost:GetChildren()) do
 		child:Destroy()
 	end
-end
-
-local function renderNoParty()
-	clearContent()
-
-	Theme.newLabel({
-		Text = ("0/%d"):format(DisplayConfig.MaxPartySize),
-		Size = UDim2.new(1, 0, 0, 30),
-		Parent = contentHost,
-	})
-
-	local createButton = Theme.newButton({
-		Text = "TOUCH TO CREATE A PARTY",
-		Size = UDim2.new(0.8, 0, 0, 56),
-		Position = UDim2.new(0.5, 0, 0, 40),
-		AnchorPoint = Vector2.new(0.5, 0),
-		Parent = contentHost,
-	})
-	createButton.Activated:Connect(function()
-		SoundController.play("ButtonClick")
-		Remotes.fireServer("Gameplay_RequestCreateParty")
-	end)
 end
 
 local function renderChapterSelection()
@@ -177,11 +154,18 @@ renderInParty = function()
 	end)
 end
 
+-- The physical Lobby pads (PartyPadService, touch-to-create-or-join) are the
+-- primary way to form a party -- their signs already show live queue state
+-- in-world. This panel is party MANAGEMENT (chapter/difficulty/start/leave)
+-- for once you're actually in one; it has no reason to float on screen for a
+-- player who hasn't touched a pad yet, so it stays hidden until then.
 local function render()
 	if PlayerState.Party.InParty then
+		panel.Visible = true
 		renderInParty()
 	else
-		renderNoParty()
+		panel.Visible = false
+		clearContent()
 	end
 end
 
