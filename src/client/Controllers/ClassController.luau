@@ -26,6 +26,20 @@ local selectedStopTarget = "UltimateFarmer"
 local spinButton: TextButton? = nil
 local autoRollButton: TextButton? = nil
 local resultLabel: TextLabel? = nil
+local selectedClassId = "Starter"
+
+-- Temporary placeholder concepts (Section 61) -- centralized here so a
+-- future AssetConfig.ClassIcons image swap is the only change needed later.
+local CLASS_ICON_TEXT: { [string]: string } = {
+	Starter = "✋",
+	PackMule = "🎒",
+	FeatherMerchant = "🪙",
+	Forkmaster = "🍴",
+	Demolitionist = "🧨",
+	Prospector = "💎",
+	DroneSpecialist = "🚁",
+	UltimateFarmer = "🥚",
+}
 
 local function classById(id: string)
 	for _, class in ipairs(DisplayConfig.Classes) do
@@ -129,132 +143,252 @@ local function runAutoRollLoop(generation: number)
 	end
 end
 
--- Builds the SLOT 1 / SLOT 2 equip buttons for one owned class row. Slot 2
--- stays locked (no button, just a label) until SecondSlotUnlocked; either
--- button is disabled if that class is already equipped in the OTHER slot,
--- preventing the same class from stacking in both slots at once (the
--- server enforces this too -- see ClassService.EquipClass's DuplicateClass
--- check -- this is just matching UX).
-local function buildEquipRow(parent: Instance, classId: string)
-	local row = Instance.new("Frame")
-	row.Name = "EquipRow"
-	row.BackgroundTransparency = 1
-	row.Size = UDim2.new(1, -16, 0, 28)
-	row.Position = UDim2.new(0, 8, 0, 64)
-	row.Parent = parent
+-- Compact left-list row: rarity-colored accent bar, icon, name, odds%, and
+-- an OWNED/EQUIPPED/LOCKED state badge (Section 59). Clicking any row
+-- (owned or not) selects it for the center/right panels -- selecting an
+-- unowned class does NOT grant it; only Spin/RollClass can do that.
+local function buildClassRow(parent: Instance, class: any, layoutOrder: number, onSelect: (string) -> ())
+	local owned = PlayerState.Profile.OwnedClasses[class.Id] == true
+	local equipped = PlayerState.Profile.EquippedClass == class.Id
+		or (PlayerState.Profile.SecondSlotUnlocked and PlayerState.Profile.SecondClass == class.Id)
 
+	local row = Theme.newPanel(class.Id, parent)
+	row.Size = UDim2.new(1, 0, 0, 60)
+	row.LayoutOrder = layoutOrder
+	if class.Id == selectedClassId then
+		row.BackgroundColor3 = Theme.Colors.Background
+	end
+
+	local accent = Instance.new("Frame")
+	accent.BackgroundColor3 = class.RarityColor
+	accent.BorderSizePixel = 0
+	accent.Size = UDim2.new(0, 6, 1, -8)
+	accent.Position = UDim2.new(0, 4, 0, 4)
+	accent.Parent = row
+	Theme.applyOutlineCorner(accent, 0, UDim.new(0, 3))
+
+	Theme.newLabel({
+		Text = CLASS_ICON_TEXT[class.Id] or "?",
+		Size = UDim2.new(0, 34, 0, 34),
+		Position = UDim2.new(0, 16, 0.5, 0),
+		AnchorPoint = Vector2.new(0, 0.5),
+		Font = Theme.Font,
+		Parent = row,
+	})
+
+	Theme.newLabel({
+		Text = class.Name,
+		Size = UDim2.new(1, -180, 0, 24),
+		Position = UDim2.new(0, 58, 0, 6),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Font = Theme.FontBody,
+		Parent = row,
+	})
+	Theme.newLabel({
+		Text = ("%.1f%%"):format(class.Odds),
+		Size = UDim2.new(1, -180, 0, 20),
+		Position = UDim2.new(0, 58, 0, 30),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextColor = Theme.Colors.TextDark,
+		Font = Theme.FontBody,
+		Parent = row,
+	})
+
+	local badgeText = equipped and "EQUIPPED" or (owned and "OWNED" or "LOCKED")
+	Theme.newLabel({
+		Text = badgeText,
+		Size = UDim2.new(0, 110, 0, 26),
+		Position = UDim2.new(1, -10, 0.5, 0),
+		AnchorPoint = Vector2.new(1, 0.5),
+		TextColor = equipped and Theme.Colors.ButtonSecondary or (owned and Theme.Colors.TextGold or Theme.Colors.Locked),
+		Font = Theme.FontBody,
+		Parent = row,
+	})
+
+	local hitButton = Instance.new("TextButton")
+	hitButton.BackgroundTransparency = 1
+	hitButton.Text = ""
+	hitButton.Size = UDim2.fromScale(1, 1)
+	hitButton.Parent = row
+	hitButton.Activated:Connect(function()
+		onSelect(class.Id)
+	end)
+end
+
+local function buildClassList(parent: Instance, onSelect: (string) -> ())
+	local scroll = Overlay.newScroll(parent)
 	local layout = Instance.new("UIListLayout")
-	layout.FillDirection = Enum.FillDirection.Horizontal
-	layout.Padding = UDim.new(0, 8)
-	layout.Parent = row
+	layout.Padding = UDim.new(0, 6)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = scroll
 
-	local equippedSlot1 = PlayerState.Profile.EquippedClass == classId
-	local equippedSlot2 = PlayerState.Profile.SecondSlotUnlocked and PlayerState.Profile.SecondClass == classId
+	for i, class in ipairs(DisplayConfig.Classes) do
+		buildClassRow(scroll, class, i, onSelect)
+	end
+end
+
+-- Center preview -- a themed icon plate standing in for a full 3D
+-- character/class-model preview (Section 60: no custom Class models are
+-- required yet, and reusing the player's own character with a themed
+-- surrounding icon is an explicitly acceptable substitute).
+local function buildPreview(parent: Instance, class: any)
+	local plate = Theme.newPanel("Preview", parent)
+	plate.Size = UDim2.fromScale(1, 1)
+	plate.BackgroundColor3 = class.RarityColor
+
+	local inner = Theme.newPanel("Inner", plate)
+	inner.Size = UDim2.new(1, -16, 1, -16)
+	inner.Position = UDim2.fromScale(0.5, 0.5)
+	inner.AnchorPoint = Vector2.new(0.5, 0.5)
+
+	Theme.newLabel({
+		Text = CLASS_ICON_TEXT[class.Id] or "?",
+		Size = UDim2.new(1, 0, 0.55, 0),
+		Position = UDim2.new(0.5, 0, 0.08, 0),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Font = Theme.Font,
+		Parent = inner,
+	})
+	Theme.newLabel({
+		Text = class.Name,
+		Size = UDim2.new(1, -12, 0, 34),
+		Position = UDim2.new(0.5, 0, 1, -14),
+		AnchorPoint = Vector2.new(0.5, 1),
+		Font = Theme.FontBody,
+		Parent = inner,
+	})
+end
+
+-- Right description card: name, description, gold stat lines, and either
+-- EQUIP SLOT 1/2 controls (owned) or a ROLL TO GET prompt (not owned) --
+-- Sections 46-53/56.
+local function buildDescriptionCard(parent: Instance, class: any)
+	local card = Theme.newPanel("Description", parent)
+	card.Size = UDim2.fromScale(1, 1)
+	card.BackgroundColor3 = Color3.fromRGB(30, 28, 40)
+
+	local scroll = Overlay.newScroll(card)
+	scroll.Size = UDim2.new(1, -20, 1, -20)
+	scroll.Position = UDim2.fromScale(0.5, 0.5)
+	scroll.AnchorPoint = Vector2.new(0.5, 0.5)
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 8)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = scroll
+
+	Theme.newLabel({
+		Text = class.Name,
+		Size = UDim2.new(1, 0, 0, 36),
+		Font = Theme.Font,
+		TextColor = Theme.Colors.TextLight,
+		LayoutOrder = 1,
+		Parent = scroll,
+	})
+	Theme.newLabel({
+		Text = class.Description,
+		Size = UDim2.new(1, 0, 0, 60),
+		Font = Theme.FontBody,
+		TextColor = Theme.Colors.TextLight,
+		LayoutOrder = 2,
+		Parent = scroll,
+	})
+
+	for i, line in ipairs(class.StatLines) do
+		Theme.newLabel({
+			Text = line,
+			Size = UDim2.new(1, 0, 0, 26),
+			Font = Theme.FontBody,
+			TextColor = Theme.Colors.TextGold,
+			LayoutOrder = 2 + i,
+			Parent = scroll,
+		})
+	end
+
+	local owned = PlayerState.Profile.OwnedClasses[class.Id] == true
+	if not owned then
+		Theme.newButton({
+			Text = "ROLL TO GET",
+			Size = UDim2.new(1, 0, 0, 44),
+			Color = Theme.Colors.ButtonDisabled,
+			LayoutOrder = 100,
+			Parent = scroll,
+		}).Active = false
+		return
+	end
+
+	local equippedSlot1 = PlayerState.Profile.EquippedClass == class.Id
+	local equippedSlot2 = PlayerState.Profile.SecondSlotUnlocked and PlayerState.Profile.SecondClass == class.Id
 
 	local slot1Button = Theme.newButton({
 		Text = equippedSlot1 and "SLOT 1: EQUIPPED" or "EQUIP SLOT 1",
-		Size = UDim2.new(0, 160, 1, 0),
+		Size = UDim2.new(1, 0, 0, 40),
 		Color = equippedSlot1 and Theme.Colors.ButtonSecondary or Theme.Colors.ButtonPrimary,
-		Parent = row,
+		LayoutOrder = 101,
+		Parent = scroll,
 	})
 	Theme.setButtonEnabled(slot1Button, not equippedSlot1 and not equippedSlot2)
 	slot1Button.Activated:Connect(function()
-		requestEquip(1, classId)
+		requestEquip(1, class.Id)
 	end)
 
 	if PlayerState.Profile.SecondSlotUnlocked then
 		local slot2Button = Theme.newButton({
 			Text = equippedSlot2 and "SLOT 2: EQUIPPED" or "EQUIP SLOT 2",
-			Size = UDim2.new(0, 160, 1, 0),
+			Size = UDim2.new(1, 0, 0, 40),
 			Color = equippedSlot2 and Theme.Colors.ButtonSecondary or Theme.Colors.ButtonPrimary,
-			Parent = row,
+			LayoutOrder = 102,
+			Parent = scroll,
 		})
 		Theme.setButtonEnabled(slot2Button, not equippedSlot2 and not equippedSlot1)
 		slot2Button.Activated:Connect(function()
-			requestEquip(2, classId)
+			requestEquip(2, class.Id)
 		end)
 	else
 		Theme.newLabel({
 			Text = "SLOT 2 LOCKED",
-			Size = UDim2.new(0, 160, 1, 0),
+			Size = UDim2.new(1, 0, 0, 30),
 			TextColor = Theme.Colors.Locked,
 			Font = Theme.FontBody,
-			Parent = row,
+			LayoutOrder = 102,
+			Parent = scroll,
 		})
 	end
 end
 
-local function buildOddsList(parent: Instance)
-	local scroll = Overlay.newScroll(parent)
-	local layout = Instance.new("UIListLayout")
-	layout.Padding = UDim.new(0, 4)
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Parent = scroll
-
-	for i, class in ipairs(DisplayConfig.Classes) do
-		local owned = PlayerState.Profile.OwnedClasses[class.Id] == true
-
-		local row = Theme.newPanel(class.Id, scroll)
-		row.Size = UDim2.new(1, 0, 0, owned and 96 or 64)
-		row.LayoutOrder = i
-
-		Theme.newLabel({
-			Text = ("%s  (%s%%)"):format(class.Name, tostring(class.Odds)),
-			Size = UDim2.new(1, -16, 0, 26),
-			Position = UDim2.new(0, 8, 0, 4),
-			TextXAlignment = Enum.TextXAlignment.Left,
-			Parent = row,
-		})
-		Theme.newLabel({
-			Text = class.Description,
-			Size = UDim2.new(1, -16, 0, 32),
-			Position = UDim2.new(0, 8, 0, 30),
-			TextXAlignment = Enum.TextXAlignment.Left,
-			Font = Theme.FontBody,
-			Parent = row,
-		})
-
-		if owned then
-			buildEquipRow(row, class.Id)
-		end
-	end
-end
-
-local function buildSlots(parent: Instance)
+-- Top-right equipped-slot summary (Section 54) -- compact, distinct from
+-- the description card's full equip CONTROLS for the selected class.
+local function buildTopSlots(parent: Instance)
 	local slot1 = Theme.newPanel("Slot1", parent)
-	slot1.Size = UDim2.new(0.48, 0, 0, 90)
+	slot1.Size = UDim2.new(0.48, 0, 1, 0)
 	slot1.Position = UDim2.new(0, 0, 0, 0)
 
 	local equippedClass = classById(PlayerState.Profile.EquippedClass or "Starter")
 	Theme.newLabel({
-		Text = "SLOT 1\n" .. (equippedClass and equippedClass.Name or "Starter"),
+		Text = (equippedClass and equippedClass.Name or "Starter") .. "\n[SELECTED]",
 		Size = UDim2.fromScale(1, 1),
+		Font = Theme.FontBody,
 		Parent = slot1,
 	})
 
 	local slot2 = Theme.newPanel("Slot2", parent)
-	slot2.Size = UDim2.new(0.48, 0, 0, 90)
+	slot2.Size = UDim2.new(0.48, 0, 1, 0)
 	slot2.Position = UDim2.new(0.52, 0, 0, 0)
 
 	if PlayerState.Profile.SecondSlotUnlocked then
 		local secondClass = PlayerState.Profile.SecondClass and classById(PlayerState.Profile.SecondClass)
 		Theme.newLabel({
-			Text = "SLOT 2\n" .. (secondClass and secondClass.Name or "Empty"),
+			Text = secondClass and (secondClass.Name .. "\n[SELECTED]") or "EMPTY",
+			TextColor = secondClass and Theme.Colors.TextDark or Theme.Colors.Locked,
 			Size = UDim2.fromScale(1, 1),
+			Font = Theme.FontBody,
 			Parent = slot2,
 		})
 	else
-		Theme.newLabel({
-			Text = "SLOT 2\nLOCKED",
-			Size = UDim2.new(1, 0, 1, -40),
-			TextColor = Theme.Colors.Locked,
-			Parent = slot2,
-		})
 		local unlockButton = Theme.newButton({
-			Text = ("+1 SLOT - %d R$"):format(DisplayConfig.ClassMonetization.ExtraSlotRobux),
-			Size = UDim2.new(1, -12, 0, 32),
-			Position = UDim2.new(0.5, 0, 1, -6),
-			AnchorPoint = Vector2.new(0.5, 1),
+			Text = ("+1 SLOT\n%d R$"):format(DisplayConfig.ClassMonetization.ExtraSlotRobux),
+			Size = UDim2.fromScale(1, 1),
+			Color = Theme.Colors.ButtonPurchase,
+			TextColor = Theme.Colors.TextLight,
 			Parent = slot2,
 		})
 		unlockButton.Activated:Connect(function()
@@ -263,103 +397,106 @@ local function buildSlots(parent: Instance)
 	end
 end
 
--- Rebuilds the slots + owned-class/equip list in place. Called on open and
--- again whenever Core_ProfileUpdated changes PlayerState.Profile (equip
--- confirmations, new rolls, Slot 2 unlock) while the overlay is open.
-local function refreshClassesPanels(slotsFrame: Instance, oddsFrame: Instance)
+-- Rebuilds every panel in place. Called on open and again whenever
+-- Core_ProfileUpdated changes PlayerState.Profile (equip confirmations, new
+-- rolls, Slot 2 unlock) while the overlay is open.
+local function refreshClassesPanels(slotsFrame: Instance, listFrame: Instance, previewFrame: Instance, descriptionFrame: Instance)
 	for _, child in ipairs(slotsFrame:GetChildren()) do
 		child:Destroy()
 	end
-	buildSlots(slotsFrame)
+	buildTopSlots(slotsFrame)
 
-	for _, child in ipairs(oddsFrame:GetChildren()) do
+	local function selectClass(classId: string)
+		selectedClassId = classId
+		refreshClassesPanels(slotsFrame, listFrame, previewFrame, descriptionFrame)
+	end
+
+	for _, child in ipairs(listFrame:GetChildren()) do
 		child:Destroy()
 	end
-	buildOddsList(oddsFrame)
-end
+	buildClassList(listFrame, selectClass)
 
-local function buildMonetizationRow(parent: Instance)
-	local row = Instance.new("Frame")
-	row.BackgroundTransparency = 1
-	row.Size = UDim2.new(1, 0, 0, 48)
-	row.Parent = parent
+	local selected = classById(selectedClassId) or classById("Starter")
+	if selected then
+		for _, child in ipairs(previewFrame:GetChildren()) do
+			child:Destroy()
+		end
+		buildPreview(previewFrame, selected)
 
-	local layout = Instance.new("UIListLayout")
-	layout.FillDirection = Enum.FillDirection.Horizontal
-	layout.Padding = UDim.new(0, 8)
-	layout.Parent = row
-
-	local fastRolls = Theme.newButton({
-		Text = ("FAST ROLLS - %d R$"):format(DisplayConfig.ClassMonetization.FastRollsRobux),
-		Size = UDim2.new(0, 180, 1, 0),
-		Parent = row,
-	})
-	fastRolls.Activated:Connect(function()
-		MonetizationController.promptGamePass("FastRolls")
-	end)
-
-	local doubleLuck = Theme.newButton({
-		Text = ("2x LUCK - %d R$"):format(DisplayConfig.ClassMonetization.DoubleLuckRobux),
-		Size = UDim2.new(0, 180, 1, 0),
-		Parent = row,
-	})
-	doubleLuck.Activated:Connect(function()
-		MonetizationController.promptGamePass("ClassLuck2x")
-	end)
+		for _, child in ipairs(descriptionFrame:GetChildren()) do
+			child:Destroy()
+		end
+		buildDescriptionCard(descriptionFrame, selected)
+	end
 end
 
 function ClassController.open()
 	stopAutoRoll()
 
-	local overlay = Overlay.new("CLASSES")
+	local overlay = Overlay.new("CLASSES", UDim2.new(0.94, 0, 0.9, 0))
 	overlay.CloseButton.Activated:Connect(function()
 		UIController.closeOverlay()
 	end)
 
+	-- Slots panel, top-right (leaving room for the title bar's X).
 	local slotsFrame = Instance.new("Frame")
 	slotsFrame.BackgroundTransparency = 1
-	slotsFrame.Size = UDim2.new(1, -20, 0, 90)
-	slotsFrame.Position = UDim2.new(0.5, 0, 0, 10)
-	slotsFrame.AnchorPoint = Vector2.new(0.5, 0)
+	slotsFrame.Size = UDim2.new(0.34, 0, 0, 64)
+	slotsFrame.Position = UDim2.new(1, -12, 0, 6)
+	slotsFrame.AnchorPoint = Vector2.new(1, 0)
 	slotsFrame.Parent = overlay.Body
-	buildSlots(slotsFrame)
 
-	local oddsFrame = Instance.new("Frame")
-	oddsFrame.BackgroundTransparency = 1
-	oddsFrame.Size = UDim2.new(1, -20, 1, -260)
-	oddsFrame.Position = UDim2.new(0.5, 0, 0, 110)
-	oddsFrame.AnchorPoint = Vector2.new(0.5, 0)
-	oddsFrame.Parent = overlay.Body
-	buildOddsList(oddsFrame)
+	-- Main 3-column band: list / preview / description.
+	local mainBand = Instance.new("Frame")
+	mainBand.BackgroundTransparency = 1
+	-- Must end above resultLabel/controlsRow/bottomRow's reserved band
+	-- (152px from the bottom -- see their Position offsets below) or the
+	-- preview/description panels visually collide with the Spin controls.
+	mainBand.Size = UDim2.new(1, -20, 1, -228)
+	mainBand.Position = UDim2.new(0.5, 0, 0, 76)
+	mainBand.AnchorPoint = Vector2.new(0.5, 0)
+	mainBand.Parent = overlay.Body
+
+	local listFrame = Instance.new("Frame")
+	listFrame.BackgroundTransparency = 1
+	listFrame.Size = UDim2.new(0.3, -8, 1, 0)
+	listFrame.Position = UDim2.new(0, 0, 0, 0)
+	listFrame.Parent = mainBand
+
+	local previewFrame = Instance.new("Frame")
+	previewFrame.BackgroundTransparency = 1
+	previewFrame.Size = UDim2.new(0.28, -8, 1, 0)
+	previewFrame.Position = UDim2.new(0.3, 8, 0, 0)
+	previewFrame.Parent = mainBand
+
+	local descriptionFrame = Instance.new("Frame")
+	descriptionFrame.BackgroundTransparency = 1
+	descriptionFrame.Size = UDim2.new(0.42, -8, 1, 0)
+	descriptionFrame.Position = UDim2.new(0.58, 8, 0, 0)
+	descriptionFrame.Parent = mainBand
 
 	resultLabel = Theme.newLabel({
 		Text = "",
-		Size = UDim2.new(1, -20, 0, 30),
-		Position = UDim2.new(0.5, 0, 1, -128),
+		Size = UDim2.new(1, -20, 0, 26),
+		Position = UDim2.new(0.5, 0, 1, -152),
 		AnchorPoint = Vector2.new(0.5, 1),
 		Parent = overlay.Body,
 	})
 
-	local monetizationRow = Instance.new("Frame")
-	monetizationRow.BackgroundTransparency = 1
-	monetizationRow.Size = UDim2.new(1, -20, 0, 48)
-	monetizationRow.Position = UDim2.new(0.5, 0, 1, -92)
-	monetizationRow.AnchorPoint = Vector2.new(0.5, 1)
-	monetizationRow.Parent = overlay.Body
-	buildMonetizationRow(monetizationRow)
-
+	-- Bottom controls: Spin / Auto Roll / Stop-at, then Fast Rolls / 2x
+	-- Luck / BACK on the row below.
 	local controlsRow = Instance.new("Frame")
 	controlsRow.BackgroundTransparency = 1
 	controlsRow.Size = UDim2.new(1, -20, 0, 56)
-	controlsRow.Position = UDim2.new(0.5, 0, 1, -8)
+	controlsRow.Position = UDim2.new(0.5, 0, 1, -70)
 	controlsRow.AnchorPoint = Vector2.new(0.5, 1)
 	controlsRow.Parent = overlay.Body
 
 	spinButton = Theme.newButton({
-		Text = ("SPIN - %d GEMS"):format(DisplayConfig.ClassRollCostGems),
-		Size = UDim2.new(0.3, 0, 1, 0),
+		Text = ("SPIN CLASS - %d 💎"):format(DisplayConfig.ClassRollCostGems),
+		Size = UDim2.new(0.34, 0, 1, 0),
 		Position = UDim2.new(0, 0, 0, 0),
-		Color = Theme.Colors.ButtonPrimary,
+		Color = Theme.Colors.ButtonSecondary,
 		Parent = controlsRow,
 	})
 	spinButton.Activated:Connect(function()
@@ -376,8 +513,8 @@ function ClassController.open()
 
 	local stopTargetButton = Theme.newButton({
 		Text = "STOP AT: " .. (classById(selectedStopTarget) and classById(selectedStopTarget).Name or selectedStopTarget),
-		Size = UDim2.new(0.35, 0, 1, 0),
-		Position = UDim2.new(0.325, 0, 0, 0),
+		Size = UDim2.new(0.33, 0, 1, 0),
+		Position = UDim2.new(0.345, 0, 0, 0),
 		Color = Theme.Colors.PanelFill,
 		TextColor = Theme.Colors.TextDark,
 		Parent = controlsRow,
@@ -395,10 +532,11 @@ function ClassController.open()
 		stopTargetButton.Text = "STOP AT: " .. (class and class.Name or selectedStopTarget)
 	end)
 
+	-- Circular-arrow Auto Roll toggle (Section 58).
 	autoRollButton = Theme.newButton({
-		Text = "AUTO ROLL: OFF",
+		Text = "🔄 AUTO - OFF",
 		Size = UDim2.new(0.3, 0, 1, 0),
-		Position = UDim2.new(0.7, 0, 0, 0),
+		Position = UDim2.new(0.69, 0, 0, 0),
 		Color = Theme.Colors.ButtonSecondary,
 		Parent = controlsRow,
 	})
@@ -418,14 +556,62 @@ function ClassController.open()
 		autoRollGeneration += 1
 		local generation = autoRollGeneration
 		if autoRollButton then
-			autoRollButton.Text = "AUTO ROLL: ON"
+			autoRollButton.Text = "🔄 AUTO - ON"
 			autoRollButton.BackgroundColor3 = Theme.Colors.ButtonDanger
 		end
 		task.spawn(runAutoRollLoop, generation)
 	end)
 
+	local bottomRow = Instance.new("Frame")
+	bottomRow.BackgroundTransparency = 1
+	bottomRow.Size = UDim2.new(1, -20, 0, 48)
+	bottomRow.Position = UDim2.new(0.5, 0, 1, -8)
+	bottomRow.AnchorPoint = Vector2.new(0.5, 1)
+	bottomRow.Parent = overlay.Body
+
+	local bottomLayout = Instance.new("UIListLayout")
+	bottomLayout.FillDirection = Enum.FillDirection.Horizontal
+	bottomLayout.Padding = UDim.new(0, 8)
+	bottomLayout.Parent = bottomRow
+
+	local fastRolls = Theme.newButton({
+		Text = MonetizationController.ownsGamePass("FastRolls") and "FAST ROLLS: OWNED"
+			or ("FAST ROLLS - %d R$"):format(DisplayConfig.ClassMonetization.FastRollsRobux),
+		Size = UDim2.new(0, 180, 1, 0),
+		Parent = bottomRow,
+	})
+	fastRolls.Activated:Connect(function()
+		MonetizationController.promptGamePass("FastRolls")
+	end)
+
+	local doubleLuck = Theme.newButton({
+		Text = MonetizationController.ownsGamePass("ClassLuck2x") and "2x LUCK: OWNED"
+			or ("2x LUCK - %d R$"):format(DisplayConfig.ClassMonetization.DoubleLuckRobux),
+		Size = UDim2.new(0, 180, 1, 0),
+		Color = Theme.Colors.ButtonPurchase,
+		TextColor = Theme.Colors.TextLight,
+		Parent = bottomRow,
+	})
+	doubleLuck.Activated:Connect(function()
+		MonetizationController.promptGamePass("ClassLuck2x")
+	end)
+
+	-- Large red BACK button (Section 43/63), in addition to the title bar's X.
+	local backButton = Theme.newButton({
+		Text = "BACK",
+		Size = UDim2.new(0, 180, 1, 0),
+		Color = Theme.Colors.ButtonDanger,
+		TextColor = Theme.Colors.TextLight,
+		Parent = bottomRow,
+	})
+	backButton.Activated:Connect(function()
+		UIController.closeOverlay()
+	end)
+
+	refreshClassesPanels(slotsFrame, listFrame, previewFrame, descriptionFrame)
+
 	local profileConnection = PlayerState.ProfileChanged:Connect(function()
-		refreshClassesPanels(slotsFrame, oddsFrame)
+		refreshClassesPanels(slotsFrame, listFrame, previewFrame, descriptionFrame)
 	end)
 
 	UIController.openOverlay("Classes", overlay.Frame, function()

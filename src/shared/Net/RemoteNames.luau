@@ -16,6 +16,9 @@ local RemoteNames = {
 	-- Core: permanent perks
 	Core_RequestBuyPermanentPerk = "Core_RequestBuyPermanentPerk",
 
+	-- Core: daily rewards
+	Core_RequestClaimDailyReward = "Core_RequestClaimDailyReward",
+
 	-- Core: alien chest
 	Core_RequestOpenAlienChest = "Core_RequestOpenAlienChest",
 	Core_AlienChestResult = "Core_AlienChestResult",

@@ -14,7 +14,7 @@ local SoundController = require(script.Parent.SoundController)
 local MonetizationController = require(script.Parent.MonetizationController)
 local PartyController = require(script.Parent.PartyController)
 
-local UIController, StatsController, InventoryController, CodesController, ShopController, ClassController, ChestController
+local UIController, StatsController, InventoryController, CodesController, ShopController, ClassController, ChestController, DailyRewardController
 
 local LobbyController = {}
 
@@ -47,6 +47,16 @@ local function buildTopBar(parent: Instance)
 	tokensPanel.Size = UDim2.new(0, 150, 1, 0)
 	tokensPanel.BackgroundColor3 = Theme.Colors.AlienTokens
 	tokensLabel = Theme.newLabel({ Text = "0 TOKENS", Size = UDim2.fromScale(1, 1), Parent = tokensPanel })
+
+	local rewardsButton = Theme.newButton({
+		Text = "REWARDS",
+		Size = UDim2.new(0, 110, 1, 0),
+		Color = Theme.Colors.TextGold,
+		Parent = topBar,
+	})
+	rewardsButton.Activated:Connect(function()
+		DailyRewardController.open()
+	end)
 
 	local inviteButton = Theme.newButton({ Text = "INVITE", Size = UDim2.new(0, 110, 1, 0), Parent = topBar })
 	inviteButton.Activated:Connect(function()
@@ -84,45 +94,97 @@ local function buildRightButtons(parent: Instance)
 		CodesController.open()
 	end)
 
-	local statsButton = Theme.newButton({ Text = "STATS", Size = UDim2.new(1, 0, 0, 56), Parent = column })
-	statsButton.Activated:Connect(function()
-		StatsController.open()
-	end)
-
 	local inventoryButton = Theme.newButton({ Text = "INVENTORY", Size = UDim2.new(1, 0, 0, 56), Parent = column })
 	inventoryButton.Activated:Connect(function()
 		InventoryController.open()
-	end)
-end
-
-local function buildLeftButtons(parent: Instance)
-	local column = Instance.new("Frame")
-	column.Name = "LeftButtons"
-	column.BackgroundTransparency = 1
-	column.Size = UDim2.new(0, 160, 0, 220)
-	column.AnchorPoint = Vector2.new(0, 0.5)
-	column.Position = UDim2.new(0, 16, 0.5, 0)
-	column.Parent = parent
-
-	local layout = Instance.new("UIListLayout")
-	layout.Padding = UDim.new(0, 12)
-	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	layout.Parent = column
-
-	local shopButton = Theme.newButton({ Text = "SHOP", Size = UDim2.new(1, 0, 0, 56), Parent = column })
-	shopButton.Activated:Connect(function()
-		ShopController.open("BAG")
-	end)
-
-	local classesButton = Theme.newButton({ Text = "CLASSES", Size = UDim2.new(1, 0, 0, 56), Parent = column })
-	classesButton.Activated:Connect(function()
-		ClassController.open()
 	end)
 
 	local chestButton = Theme.newButton({ Text = "ALIEN CHEST", Size = UDim2.new(1, 0, 0, 56), Parent = column })
 	chestButton.Activated:Connect(function()
 		ChestController.open()
 	end)
+end
+
+-- Compact SHOP / CLASSES / STATS icon menu (large square icon area + label,
+-- rounded dark outline), stacked vertically per the reference layout. Each
+-- button just calls the SAME existing Controller.open() used elsewhere --
+-- no new backend, no duplicate system, just a dedicated icon-forward entry
+-- point distinct from the plain text-button columns.
+local SIDE_MENU_ENTRIES = { "SHOP", "CLASSES", "STATS" }
+local SIDE_MENU_ICON_TEXT: { [string]: string } = { SHOP = "🛒", CLASSES = "🎴", STATS = "📊" }
+
+local function buildSideMenu(parent: Instance)
+	local column = Instance.new("Frame")
+	column.Name = "SideMenu"
+	column.BackgroundTransparency = 1
+	column.Size = UDim2.new(0, 110, 0, 330)
+	column.AnchorPoint = Vector2.new(0, 0)
+	-- Below the Leaderboard panel (16, 10, 220x240 -> bottom edge at 250),
+	-- not vertically centered, so the two never overlap.
+	column.Position = UDim2.new(0, 16, 0, 258)
+	column.Parent = parent
+
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 12)
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = column
+
+	local function open(name: string)
+		if name == "SHOP" then
+			ShopController.open("BAG")
+		elseif name == "CLASSES" then
+			ClassController.open()
+		elseif name == "STATS" then
+			StatsController.open()
+		end
+	end
+
+	for i, name in ipairs(SIDE_MENU_ENTRIES) do
+		local card = Theme.newPanel(name .. "Card", column)
+		card.Size = UDim2.new(1, 0, 0, 102)
+		card.LayoutOrder = i
+
+		local iconArea = Theme.newPanel(name .. "Icon", card)
+		iconArea.Size = UDim2.new(0, 64, 0, 64)
+		iconArea.Position = UDim2.new(0.5, 0, 0, 6)
+		iconArea.AnchorPoint = Vector2.new(0.5, 0)
+		iconArea.BackgroundColor3 = Theme.Colors.ButtonPrimary
+		Theme.newLabel({
+			Text = SIDE_MENU_ICON_TEXT[name] or "?",
+			Size = UDim2.fromScale(1, 1),
+			Font = Theme.Font,
+			Parent = iconArea,
+		})
+
+		Theme.newLabel({
+			Text = name,
+			Size = UDim2.new(1, -8, 0, 24),
+			Position = UDim2.new(0.5, 0, 1, -28),
+			AnchorPoint = Vector2.new(0.5, 0),
+			Font = Theme.FontBody,
+			Parent = card,
+		})
+
+		-- The whole card is clickable (not just a small button inside it) --
+		-- matches the reference's "tap anywhere on the tile" feel and gives
+		-- both desktop hover/click and mobile touch the same target.
+		local hitButton = Instance.new("TextButton")
+		hitButton.BackgroundTransparency = 1
+		hitButton.Text = ""
+		hitButton.Size = UDim2.fromScale(1, 1)
+		hitButton.Parent = card
+		hitButton.MouseEnter:Connect(function()
+			card.BackgroundColor3 = Theme.Colors.Background
+		end)
+		hitButton.MouseLeave:Connect(function()
+			card.BackgroundColor3 = Theme.Colors.PanelFill
+		end)
+		hitButton.Activated:Connect(function()
+			SoundController.play("ButtonClick")
+			open(name)
+		end)
+	end
 end
 
 local function buildLeftPromo(parent: Instance)
@@ -302,7 +364,7 @@ end
 function LobbyController.build(root: Frame)
 	buildTopBar(root)
 	buildRightButtons(root)
-	buildLeftButtons(root)
+	buildSideMenu(root)
 	buildLeftPromo(root)
 	buildLeaderboard(root)
 	PartyController.build(root)
@@ -317,6 +379,7 @@ function LobbyController.init(dependencies: {
 	ShopController: any,
 	ClassController: any,
 	ChestController: any,
+	DailyRewardController: any,
 })
 	UIController = dependencies.UIController
 	StatsController = dependencies.StatsController
@@ -325,6 +388,7 @@ function LobbyController.init(dependencies: {
 	ShopController = dependencies.ShopController
 	ClassController = dependencies.ClassController
 	ChestController = dependencies.ChestController
+	DailyRewardController = dependencies.DailyRewardController
 
 	PlayerState.ProfileChanged:Connect(refreshCurrencyLabels)
 end

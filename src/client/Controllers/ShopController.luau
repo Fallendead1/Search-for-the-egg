@@ -5,6 +5,8 @@
 -- lives in UpgradeBookController since those are run-scoped Cash
 -- purchases made mid-run.
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
 local Theme = require(script.Parent.Parent.UI.Theme)
 local Overlay = require(script.Parent.Parent.UI.Components.Overlay)
 local Remotes = require(script.Parent.Parent.Net.Remotes)
@@ -12,6 +14,8 @@ local DisplayConfig = require(script.Parent.Parent.Data.DisplayConfig)
 local PlayerState = require(script.Parent.Parent.State.PlayerState)
 local MonetizationController = require(script.Parent.MonetizationController)
 local Format = require(script.Parent.Parent.Util.Format)
+local AssetConfig = require(ReplicatedStorage.SearchForTheEgg.AssetConfig)
+local PermanentPerksConfig = require(ReplicatedStorage.SearchForTheEgg.MetaConfig.PermanentPerksConfig)
 
 local UIController
 
@@ -128,121 +132,218 @@ local function buildBagTab(body: Instance)
 	end
 end
 
-local function buildGemsTab(body: Instance)
-	local scroll = Overlay.newScroll(body)
+-- 5 progress dots: dark navy for empty, bright green for purchased levels
+-- (Section 41's "EMPTY -> dark/navy, PURCHASED -> green/bright").
+local function buildProgressDots(parent: Instance, level: number, maxLevel: number, yOffset: number)
+	local row = Instance.new("Frame")
+	row.BackgroundTransparency = 1
+	row.Size = UDim2.new(1, 0, 0, 16)
+	row.Position = UDim2.new(0, 0, 0, yOffset)
+	row.Parent = parent
+
 	local layout = Instance.new("UIListLayout")
-	layout.Padding = UDim.new(0, 8)
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Parent = scroll
+	layout.FillDirection = Enum.FillDirection.Horizontal
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layout.Padding = UDim.new(0, 6)
+	layout.Parent = row
+
+	for i = 1, maxLevel do
+		local dot = Instance.new("Frame")
+		dot.Size = UDim2.new(0, 16, 0, 16)
+		dot.BackgroundColor3 = i <= level and Theme.Colors.ProgressDotFilled or Theme.Colors.ProgressDotEmpty
+		dot.BorderSizePixel = 0
+		Theme.applyOutlineCorner(dot, 1, UDim.new(1, 0))
+		dot.Parent = row
+	end
+end
+
+-- One 2x2-grid card per PermanentPerksConfig perk: icon placeholder, name,
+-- progress dots, current level, and either the (flat, per PermanentPerksConfig)
+-- Gem price or MAX.
+local function buildPerkCard(parent: Instance, perk: any, layoutOrder: number)
+	local level = PlayerState.Profile.PermanentPerkLevels[perk.Id] or 0
+	local maxLevel = PermanentPerksConfig.MaxLevel
+
+	local card = Theme.newPanel(perk.Id, parent)
+	card.LayoutOrder = layoutOrder
+
+	local iconArea = Instance.new("Frame")
+	iconArea.BackgroundTransparency = 1
+	iconArea.Size = UDim2.new(0, 48, 0, 48)
+	iconArea.Position = UDim2.new(0.5, 0, 0, 8)
+	iconArea.AnchorPoint = Vector2.new(0.5, 0)
+	iconArea.Parent = card
+
+	local icon = Instance.new("ImageLabel")
+	icon.BackgroundTransparency = 1
+	icon.Size = UDim2.fromScale(1, 1)
+	icon.Image = AssetConfig.image(AssetConfig.ToolIcons.Bag)
+	icon.Parent = iconArea
+	Theme.newLabel({ Text = "⭐", Size = UDim2.fromScale(1, 1), Font = Theme.Font, Parent = iconArea })
 
 	Theme.newLabel({
-		Text = "PERMANENT PERKS",
-		Size = UDim2.new(1, 0, 0, 30),
-		LayoutOrder = 0,
-		Parent = scroll,
+		Text = perk.Name,
+		Size = UDim2.new(1, -8, 0, 24),
+		Position = UDim2.new(0, 4, 0, 60),
+		Font = Theme.FontBody,
+		Parent = card,
 	})
+
+	buildProgressDots(card, level, maxLevel, 88)
+
+	Theme.newLabel({
+		Text = ("LEVEL %d / %d"):format(level, maxLevel),
+		Size = UDim2.new(1, 0, 0, 18),
+		Position = UDim2.new(0, 0, 0, 108),
+		TextColor = Theme.Colors.TextDark,
+		Font = Theme.FontBody,
+		Parent = card,
+	})
+
+	if level >= maxLevel then
+		Theme.newLabel({
+			Text = "MAX",
+			Size = UDim2.new(1, -20, 0, 32),
+			Position = UDim2.new(0.5, 0, 1, -8),
+			AnchorPoint = Vector2.new(0.5, 1),
+			TextColor = Theme.Colors.ButtonSecondary,
+			Parent = card,
+		})
+	else
+		local affordable = PlayerState.Profile.Gems >= perk.GemCost
+		local buyButton = Theme.newButton({
+			Text = ("%d GEMS"):format(perk.GemCost),
+			Size = UDim2.new(1, -20, 0, 32),
+			Position = UDim2.new(0.5, 0, 1, -8),
+			AnchorPoint = Vector2.new(0.5, 1),
+			Color = Theme.Colors.ButtonPurchase,
+			TextColor = Theme.Colors.TextLight,
+			Parent = card,
+		})
+		Theme.setButtonEnabled(buyButton, affordable)
+		buyButton.Activated:Connect(function()
+			-- CoreBootstrap's handler reads this as a raw perkId string.
+			Remotes.fireServer("Core_RequestBuyPermanentPerk", perk.Id)
+		end)
+	end
+end
+
+local function buildPerkGrid(parent: Instance)
+	local grid = Instance.new("Frame")
+	grid.Name = "PerkGrid"
+	grid.BackgroundTransparency = 1
+	grid.Size = UDim2.new(0.62, -8, 1, 0)
+	grid.Position = UDim2.new(0, 0, 0, 0)
+	grid.Parent = parent
+
+	Theme.newLabel({
+		Text = "UPGRADES",
+		Size = UDim2.new(1, 0, 0, 30),
+		Parent = grid,
+	})
+
+	local gridContainer = Instance.new("Frame")
+	gridContainer.BackgroundTransparency = 1
+	gridContainer.Size = UDim2.new(1, 0, 1, -34)
+	gridContainer.Position = UDim2.new(0, 0, 0, 34)
+	gridContainer.Parent = grid
+
+	local layout = Instance.new("UIGridLayout")
+	layout.CellPadding = UDim2.new(0, 10, 0, 10)
+	layout.CellSize = UDim2.new(0.485, 0, 0.47, 0)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = gridContainer
 
 	for i, perk in ipairs(DisplayConfig.PermanentPerks) do
-		local level = PlayerState.Profile.PermanentPerkLevels[perk.Id] or 0
-		local row = Theme.newPanel(perk.Id, scroll)
-		row.Size = UDim2.new(1, 0, 0, 56)
-		row.LayoutOrder = i
-
-		Theme.newLabel({
-			Text = ("%s (Lvl %d/5)"):format(perk.Name, level),
-			Size = UDim2.new(0.55, 0, 1, 0),
-			Position = UDim2.new(0, 10, 0, 0),
-			TextXAlignment = Enum.TextXAlignment.Left,
-			Parent = row,
-		})
-
-		if level >= 5 then
-			Theme.newLabel({
-				Text = "MAX",
-				Size = UDim2.new(0.35, -10, 1, 0),
-				Position = UDim2.new(1, -10, 0, 0),
-				AnchorPoint = Vector2.new(1, 0),
-				TextColor = Theme.Colors.ButtonSecondary,
-				Parent = row,
-			})
-		else
-			local affordable = PlayerState.Profile.Gems >= perk.GemCost
-			local buyButton = Theme.newButton({
-				Text = ("%d GEMS"):format(perk.GemCost),
-				Size = UDim2.new(0, 140, 0, 44),
-				Position = UDim2.new(1, -10, 0.5, 0),
-				AnchorPoint = Vector2.new(1, 0.5),
-				Color = Theme.Colors.Gems,
-				Parent = row,
-			})
-			Theme.setButtonEnabled(buyButton, affordable)
-			buyButton.Activated:Connect(function()
-				-- CoreBootstrap's handler reads this as a raw perkId string.
-				Remotes.fireServer("Core_RequestBuyPermanentPerk", perk.Id)
-			end)
-		end
+		buildPerkCard(gridContainer, perk, i)
 	end
+end
 
-	Theme.newLabel({
-		Text = "GEMS",
-		Size = UDim2.new(1, 0, 0, 30),
-		LayoutOrder = 100,
-		Parent = scroll,
-	})
+-- Cyan/blue Gem purchase cards (Section 37/42) -- real configured Developer
+-- Products only (DisplayConfig.GemPacks, sourced from MonetizationConfig),
+-- never the reference game's numbers. Id == 0 disables the button rather
+-- than firing an invalid Marketplace prompt (MonetizationController already
+-- guards this centrally).
+local function buildGemCards(parent: Instance)
+	local column = Instance.new("Frame")
+	column.Name = "GemCards"
+	column.BackgroundTransparency = 1
+	column.Size = UDim2.new(0.36, 0, 1, 0)
+	column.Position = UDim2.new(1, 0, 0, 0)
+	column.AnchorPoint = Vector2.new(1, 0)
+	column.Parent = parent
+
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 10)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = column
 
 	for i, pack in ipairs(DisplayConfig.GemPacks) do
-		local row = Theme.newPanel(pack.Id, scroll)
-		row.Size = UDim2.new(1, 0, 0, 56)
-		row.LayoutOrder = 100 + i
+		local card = Theme.newPanel(pack.Id, column)
+		card.Size = UDim2.new(1, 0, 0, 92)
+		card.LayoutOrder = i
+		card.BackgroundColor3 = Theme.Colors.Gems
 
 		Theme.newLabel({
 			Text = ("%d GEMS"):format(pack.Gems),
-			Size = UDim2.new(0.5, 0, 1, 0),
-			Position = UDim2.new(0, 10, 0, 0),
-			TextXAlignment = Enum.TextXAlignment.Left,
-			Parent = row,
+			Size = UDim2.new(1, 0, 0, 40),
+			Position = UDim2.new(0, 0, 0, 6),
+			Parent = card,
 		})
 
-		local buyButton = Theme.newButton({
-			Text = ("%d R$"):format(pack.Robux),
-			Size = UDim2.new(0, 120, 0, 44),
-			Position = UDim2.new(1, -10, 0.5, 0),
-			AnchorPoint = Vector2.new(1, 0.5),
-			Color = Theme.Colors.TextGold,
-			Parent = row,
-		})
 		local hasProduct = MonetizationController.hasProduct(pack.Id)
+		local buyButton = Theme.newButton({
+			Text = hasProduct and ("%d R$"):format(pack.Robux) or "UNAVAILABLE",
+			Size = UDim2.new(1, -20, 0, 34),
+			Position = UDim2.new(0.5, 0, 1, -8),
+			AnchorPoint = Vector2.new(0.5, 1),
+			Color = Theme.Colors.ButtonSecondary,
+			Parent = card,
+		})
 		Theme.setButtonEnabled(buyButton, hasProduct)
 		buyButton.Activated:Connect(function()
-			MonetizationController.promptProduct(pack.Id)
+			if hasProduct then
+				MonetizationController.promptProduct(pack.Id)
+			end
 		end)
 	end
 
-	local promoRow = Theme.newPanel("DoubleGemsPromo", scroll)
-	promoRow.Size = UDim2.new(1, 0, 0, 56)
-	promoRow.LayoutOrder = 200
-	promoRow.BackgroundColor3 = Theme.Colors.TextGold
+	local promoCard = Theme.newPanel("DoubleGemsPromo", column)
+	promoCard.Size = UDim2.new(1, 0, 0, 92)
+	promoCard.LayoutOrder = 100
+	promoCard.BackgroundColor3 = Theme.Colors.TextGold
 
 	Theme.newLabel({
-		Text = "2x GEMS [PERMANENT]",
-		Size = UDim2.new(0.55, 0, 1, 0),
-		Position = UDim2.new(0, 10, 0, 0),
-		TextXAlignment = Enum.TextXAlignment.Left,
-		Parent = promoRow,
+		Text = "2x GEMS\n[PERMANENT]",
+		Size = UDim2.new(1, 0, 0, 48),
+		Position = UDim2.new(0, 0, 0, 4),
+		Parent = promoCard,
 	})
 
-	local promoButton = Theme.newButton({
-		Text = ("%d R$"):format(DisplayConfig.DoubleGemsRobux),
-		Size = UDim2.new(0, 120, 0, 44),
-		Position = UDim2.new(1, -10, 0.5, 0),
-		AnchorPoint = Vector2.new(1, 0.5),
-		Parent = promoRow,
-	})
 	local hasDoubleGems = MonetizationController.hasGamePass("Gems2xPermanent")
-	Theme.setButtonEnabled(promoButton, hasDoubleGems)
+	local promoButton = Theme.newButton({
+		Text = hasDoubleGems and "OWNED" or ("%d R$"):format(DisplayConfig.DoubleGemsRobux),
+		Size = UDim2.new(1, -20, 0, 34),
+		Position = UDim2.new(0.5, 0, 1, -8),
+		AnchorPoint = Vector2.new(0.5, 1),
+		Parent = promoCard,
+	})
+	Theme.setButtonEnabled(promoButton, not hasDoubleGems)
 	promoButton.Activated:Connect(function()
-		MonetizationController.promptGamePass("Gems2xPermanent")
+		if not hasDoubleGems then
+			MonetizationController.promptGamePass("Gems2xPermanent")
+		end
 	end)
+end
+
+local function buildGemsTab(body: Instance)
+	local container = Instance.new("Frame")
+	container.BackgroundTransparency = 1
+	container.Size = UDim2.fromScale(1, 1)
+	container.Parent = body
+
+	buildPerkGrid(container)
+	buildGemCards(container)
 end
 
 function ShopController.open(defaultTab: string?)

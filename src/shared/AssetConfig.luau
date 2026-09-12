@@ -35,6 +35,9 @@ AssetConfig.ToolIcons = {
 	Dynamite = 0,
 	Vacuum = 0,
 	Drone = 0,
+	FeatherGrabber = 0,
+	TornadoLauncher = 0,
+	PackingBot = 0,
 }
 
 -- Currency icons (Cash/Gems/AlienTokens toast + HUD readouts).
@@ -83,5 +86,14 @@ AssetConfig.SkinIcons = {
 -- Seasonal/limited chest or model variants. Empty until an actual event is
 -- designed -- add entries here (never invent ids) when one is.
 AssetConfig.EventVariants = {}
+
+-- Daily Rewards card icons (see MetaConfig/DailyRewardConfig + client
+-- DailyRewardController). Gem = every normal day; Chest = a Milestone day
+-- (2/5); PremiumChest = Day 8's premium-looking card.
+AssetConfig.DailyRewardIcons = {
+	Gem = 0,
+	Chest = 0,
+	PremiumChest = 0,
+}
 
 return AssetConfig

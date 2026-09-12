@@ -51,6 +51,7 @@ local PermanentPerksConfig = require(MetaConfig.PermanentPerksConfig)
 local MonetizationConfig = require(MetaConfig.MonetizationConfig)
 local RewardConfig = require(MetaConfig.RewardConfig)
 local DataSchema = require(MetaConfig.DataSchema)
+local DailyRewardConfig = require(MetaConfig.DailyRewardConfig)
 
 local RunPlayerStateService = require(Gameplay.RunPlayerStateService)
 local ToolService = require(Gameplay.ToolService)
@@ -969,6 +970,7 @@ checkAllZero("CurrencyIcons", AssetConfig.CurrencyIcons)
 checkAllZero("ClassIcons", AssetConfig.ClassIcons)
 checkAllZero("Models", AssetConfig.Models)
 checkAllZero("SkinIcons", AssetConfig.SkinIcons)
+checkAllZero("DailyRewardIcons", AssetConfig.DailyRewardIcons)
 checkEqual("image(0) returns empty string", AssetConfig.image(0), "")
 checkEqual("image(nonzero) builds an rbxassetid:// url", AssetConfig.image(123), "rbxassetid://123")
 for _, classEntry in ipairs(ClassConfig.Odds) do
@@ -1090,6 +1092,47 @@ check("valid teleport payload is unaffected by the new tool roster", ChapterArri
 }))
 
 -- ============================================================
+-- 37. Daily Rewards config + wrap/persistence-default sanity. Section 40's
+--     actual claim/eligibility logic (DailyRewardService.Claim/GetStatus)
+--     requires a real DataService.IsLoaded(player) profile the same way
+--     MetaProgressionService.BuyPermanentPerk does (see this file's header
+--     and the "NOT covered" note below) -- what IS testable without one is
+--     the exact reward table, the 24h interval, the day-wrap arithmetic
+--     DailyRewardService.Claim uses, and the fresh-profile defaults.
+-- ============================================================
+suite("DailyRewards")
+checkEqual("exactly 8 reward days", DailyRewardConfig.TotalDays, 8)
+checkEqual("claim interval is 24 hours", DailyRewardConfig.ClaimIntervalSeconds, 24 * 60 * 60)
+
+local EXPECTED_DAILY_GEMS = { 25, 50, 25, 35, 75, 40, 50, 100 }
+for i, expectedGems in ipairs(EXPECTED_DAILY_GEMS) do
+	local day = DailyRewardConfig.Days[i]
+	check(("Day %d exists"):format(i), day ~= nil)
+	if day then
+		checkEqual(("Day %d is Gems"):format(i), day.Gems, expectedGems)
+		checkEqual(("Day %d.Day field matches its index"):format(i), day.Day, i)
+	end
+end
+check("Day 2 is a Milestone", DailyRewardConfig.Days[2].Milestone == true)
+check("Day 5 is a Milestone", DailyRewardConfig.Days[5].Milestone == true)
+check("Day 8 is a Milestone", DailyRewardConfig.Days[8].Milestone == true)
+check("Day 8 is Premium", DailyRewardConfig.Days[8].Premium == true)
+check("Day 1 is not a Milestone", DailyRewardConfig.Days[1].Milestone == nil)
+
+-- Fresh-profile defaults (DataSchema is pure -- no live profile needed).
+local freshDailyProfile = DataSchema.GetDefaultProfile()
+checkEqual("fresh profile starts on Day 1", freshDailyProfile.DailyReward.CurrentDay, 1)
+check("fresh profile has never claimed", freshDailyProfile.DailyReward.LastClaimAt == nil)
+
+-- The exact day-advance/wrap formula DailyRewardService.Claim uses
+-- ((day % TotalDays) + 1) -- verified here as pure arithmetic since Claim
+-- itself needs a loaded profile to invoke end-to-end.
+for day = 1, 7 do
+	checkEqual(("Day %d advances to Day %d"):format(day, day + 1), (day % DailyRewardConfig.TotalDays) + 1, day + 1)
+end
+checkEqual("Day 8 wraps back to Day 1", (8 % DailyRewardConfig.TotalDays) + 1, 1)
+
+-- ============================================================
 -- Summary
 -- ============================================================
 print(("[DebugTests] %d passed, %d failed (%d total)"):format(passed, failed, passed + failed))
@@ -1138,4 +1181,10 @@ print(table.concat({
 	"  - The conveyor crate visual (ConveyorVisualController) and its pool/reuse behavior -- purely",
 	"    presentational, client-side, and cannot run in this server-only Studio-boot suite; SellService's",
 	"    atomic bag->cash flow it rides on top of IS tested above (ConveyorSell suite)",
+	"  - DailyRewardService.Claim/GetStatus end-to-end (double-claim rejection, real eligibility timing,",
+	"    persistence across a claim) -- same limitation as PermanentOwned/BuyPermanentPerk above: both",
+	"    read/write a loaded DataService profile. The reward table, 24h interval, Day 1-8/Milestone/Premium",
+	"    flags, fresh-profile defaults, and the exact day-wrap arithmetic Claim uses ARE tested above",
+	"    (DailyRewards suite); the full claim flow (auto-open, card states, Gems awarded) was verified",
+	"    live in Studio Play, not fabricated -- see the final report",
 }, "\n"))

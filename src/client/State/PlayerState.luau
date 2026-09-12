@@ -31,6 +31,8 @@ PlayerState.Profile = {
 	-- EntitlementSummary. NOT Game Pass ownership (see MonetizationController
 	-- .ownsEntitlement vs .ownsGamePass).
 	EntitlementSummary = {} :: { [string]: boolean },
+	DailyRewardDay = 1,
+	DailyRewardNextClaimAt = 0,
 }
 
 PlayerState.Run = {

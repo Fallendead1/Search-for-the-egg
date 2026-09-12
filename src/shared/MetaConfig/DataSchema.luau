@@ -55,6 +55,14 @@ function DataSchema.GetDefaultProfile()
 			},
 		},
 
+		-- CurrentDay is 1-8 (see MetaConfig/DailyRewardConfig.Days); LastClaimAt
+		-- is a server os.time() Unix timestamp, nil until the first ever claim.
+		-- Never trust a client-supplied day or amount -- see DailyRewardService.
+		DailyReward = {
+			CurrentDay = 1,
+			LastClaimAt = nil,
+		},
+
 		CodesRedeemed = {},
 
 		Entitlements = {},

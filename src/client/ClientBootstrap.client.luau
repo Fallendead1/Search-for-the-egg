@@ -30,6 +30,7 @@ local ShopController = require(script.Parent.Controllers.ShopController)
 local BagCounterController = require(script.Parent.Controllers.BagCounterController)
 local LobbyPromptController = require(script.Parent.Controllers.LobbyPromptController)
 local UpgradeBookController = require(script.Parent.Controllers.UpgradeBookController)
+local DailyRewardController = require(script.Parent.Controllers.DailyRewardController)
 local PartyController = require(script.Parent.Controllers.PartyController)
 local LobbyController = require(script.Parent.Controllers.LobbyController)
 local RunHUDController = require(script.Parent.Controllers.RunHUDController)
@@ -58,6 +59,7 @@ ShopController.init(UIController)
 BagCounterController.init(ShopController)
 LobbyPromptController.init(ShopController, ClassController)
 UpgradeBookController.init(UIController)
+DailyRewardController.init(UIController)
 PartyController.init()
 
 LobbyController.init({
@@ -68,6 +70,7 @@ LobbyController.init({
 	ShopController = ShopController,
 	ClassController = ClassController,
 	ChestController = ChestController,
+	DailyRewardController = DailyRewardController,
 })
 LobbyController.build(UIController.getLobbyRoot())
 

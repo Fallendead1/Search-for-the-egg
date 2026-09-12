@@ -16,6 +16,10 @@ Theme.Colors = {
 	ButtonSecondaryPressed = Color3.fromRGB(92, 168, 66),
 	ButtonDanger = Color3.fromRGB(230, 90, 80),
 	ButtonDisabled = Color3.fromRGB(170, 170, 170),
+	ButtonPurchase = Color3.fromRGB(160, 90, 225),
+
+	ProgressDotEmpty = Color3.fromRGB(40, 44, 74),
+	ProgressDotFilled = Color3.fromRGB(90, 220, 110),
 
 	TextDark = Color3.fromRGB(58, 40, 20),
 	TextLight = Color3.fromRGB(255, 255, 255),

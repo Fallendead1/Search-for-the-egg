@@ -314,11 +314,13 @@ local function permanentPerkCost(perkId: string, fallback: number): number
 	return (perk and perk.CostPerLevel) or fallback
 end
 
+-- Order matches the reference Shop's 2x2 reading order (top-left to
+-- bottom-right): Bag Size, Hand Grasp, Feather Value, Gem Value.
 DisplayConfig.PermanentPerks = {
 	{ Id = "BagSize", Name = "BAG SIZE", GemCost = permanentPerkCost("BagSize", 25) },
-	{ Id = "HandGrabAmount", Name = "HAND GRAB AMOUNT", GemCost = permanentPerkCost("HandGrabAmount", 50) },
-	{ Id = "GemValue", Name = "GEM VALUE", GemCost = permanentPerkCost("GemValue", 150) },
+	{ Id = "HandGrabAmount", Name = "HAND GRASP", GemCost = permanentPerkCost("HandGrabAmount", 50) },
 	{ Id = "FeatherValue", Name = "FEATHER VALUE", GemCost = permanentPerkCost("FeatherValue", 20) },
+	{ Id = "GemValue", Name = "GEM VALUE", GemCost = permanentPerkCost("GemValue", 150) },
 }
 DisplayConfig.PermanentPerkMaxLevel = (PermanentPerksConfig and PermanentPerksConfig.MaxLevel) or 5
 
@@ -332,14 +334,42 @@ DisplayConfig.DoubleGemsRobux = 160
 -- CLASSES
 -- ============================================================
 local CLASS_DESCRIPTIONS = {
-	Starter = "No bonuses. Every farmer starts somewhere.",
-	PackMule = "Carry 50% more feathers in every bag.",
-	FeatherMerchant = "Earn 20% more money whenever you sell feathers.",
-	Forkmaster = "Pitchfork swings collect 25% more feathers, and pitchfork upgrades cost 25% less.",
-	Demolitionist = "Dynamite explosions have a 20% larger blast radius. 10% chance: TNT splits into 3 mini charges.",
-	Prospector = "Find extra gems while collecting feathers. Feathers can transform into a Diamond.",
-	DroneSpecialist = "Always own a drone. It flies 30% faster and carries 40% more feathers. Chance to call in a 3-drone work swarm.",
-	UltimateFarmer = "Receive every class's passive stat bonuses at once. Randomly activates Golden Harvest.",
+	Starter = "A simple start with no special bonuses. Every great Egg Hunter starts somewhere.",
+	PackMule = "Carry more Feathers before you need to head back and sell.",
+	FeatherMerchant = "Every Feather is worth more when you sell it.",
+	Forkmaster = "Master the Pitchfork. Clear more Feathers and upgrade it for less.",
+	Demolitionist = "Make room with bigger explosions. Your Dynamite clears a wider area and can split into mini charges.",
+	Prospector = "A sharp eye for valuable finds. Discover more Gems and rare Diamond rewards while digging.",
+	DroneSpecialist = "Your automated helpers work faster, carry more, and can swarm the pile.",
+	UltimateFarmer = "The ultimate Egg Hunter. Receive the power of every other Class together.",
+}
+
+-- Exact stat-line wording/values per Sections 46-53 -- sourced from the
+-- REAL modifiers in MetaConfig/ClassConfig, never the reference game's
+-- numbers. Prospector has no numeric field configured (ProspectorEnabled
+-- only), so its lines stay descriptive rather than inventing a percentage.
+local CLASS_STAT_LINES = {
+	Starter = { "NO PASSIVE BONUS" },
+	PackMule = { "+50% BAG CAPACITY" },
+	FeatherMerchant = { "+20% SALE CASH" },
+	Forkmaster = { "+25% PITCHFORK YIELD", "25% CHEAPER PITCHFORK UPGRADES" },
+	Demolitionist = { "+20% BLAST RADIUS", "10% MINI-CHARGE SPLIT" },
+	Prospector = { "INCREASED GEM FINDS WHILE DIGGING", "CHANCE TO FIND RARE DIAMONDS" },
+	DroneSpecialist = { "DRONE ALWAYS AVAILABLE", "+30% DRONE SPEED", "+40% DRONE CAPACITY", "3-DRONE SWARM CHANCE" },
+	UltimateFarmer = { "ALL CLASS PASSIVES", "CHANCE FOR GOLDEN HARVEST" },
+}
+
+-- Rarity-style row coloring (Section 45) -- a hint alongside name/odds/state
+-- text, never the only indicator.
+local CLASS_RARITY_COLOR = {
+	Starter = Color3.fromRGB(190, 190, 190),
+	PackMule = Color3.fromRGB(110, 210, 120),
+	FeatherMerchant = Color3.fromRGB(255, 214, 64),
+	Forkmaster = Color3.fromRGB(90, 210, 180),
+	Demolitionist = Color3.fromRGB(230, 90, 80),
+	Prospector = Color3.fromRGB(90, 150, 240),
+	DroneSpecialist = Color3.fromRGB(170, 210, 235),
+	UltimateFarmer = Color3.fromRGB(220, 140, 240),
 }
 
 if ClassConfig then
@@ -355,19 +385,21 @@ if ClassConfig then
 			Name = (classInfo and classInfo.DisplayName) or odd.Id,
 			Odds = totalWeight > 0 and (odd.Weight / totalWeight * 100) or 0,
 			Description = CLASS_DESCRIPTIONS[odd.Id] or "",
+			StatLines = CLASS_STAT_LINES[odd.Id] or {},
+			RarityColor = CLASS_RARITY_COLOR[odd.Id] or Color3.fromRGB(190, 190, 190),
 		})
 	end
 	DisplayConfig.ClassRollCostGems = ClassConfig.RollCostGems
 else
 	DisplayConfig.Classes = {
-		{ Id = "Starter", Name = "Starter", Odds = 40.0, Description = CLASS_DESCRIPTIONS.Starter },
-		{ Id = "PackMule", Name = "Pack Mule", Odds = 25.0, Description = CLASS_DESCRIPTIONS.PackMule },
-		{ Id = "FeatherMerchant", Name = "Feather Merchant", Odds = 14.0, Description = CLASS_DESCRIPTIONS.FeatherMerchant },
-		{ Id = "Forkmaster", Name = "Forkmaster", Odds = 9.0, Description = CLASS_DESCRIPTIONS.Forkmaster },
-		{ Id = "Demolitionist", Name = "Demolitionist", Odds = 7.0, Description = CLASS_DESCRIPTIONS.Demolitionist },
-		{ Id = "Prospector", Name = "Prospector", Odds = 3.9, Description = CLASS_DESCRIPTIONS.Prospector },
-		{ Id = "DroneSpecialist", Name = "Drone Specialist", Odds = 1.0, Description = CLASS_DESCRIPTIONS.DroneSpecialist },
-		{ Id = "UltimateFarmer", Name = "Ultimate Farmer", Odds = 0.1, Description = CLASS_DESCRIPTIONS.UltimateFarmer },
+		{ Id = "Starter", Name = "Starter", Odds = 40.0, Description = CLASS_DESCRIPTIONS.Starter, StatLines = CLASS_STAT_LINES.Starter, RarityColor = CLASS_RARITY_COLOR.Starter },
+		{ Id = "PackMule", Name = "Pack Mule", Odds = 25.0, Description = CLASS_DESCRIPTIONS.PackMule, StatLines = CLASS_STAT_LINES.PackMule, RarityColor = CLASS_RARITY_COLOR.PackMule },
+		{ Id = "FeatherMerchant", Name = "Feather Merchant", Odds = 14.0, Description = CLASS_DESCRIPTIONS.FeatherMerchant, StatLines = CLASS_STAT_LINES.FeatherMerchant, RarityColor = CLASS_RARITY_COLOR.FeatherMerchant },
+		{ Id = "Forkmaster", Name = "Forkmaster", Odds = 9.0, Description = CLASS_DESCRIPTIONS.Forkmaster, StatLines = CLASS_STAT_LINES.Forkmaster, RarityColor = CLASS_RARITY_COLOR.Forkmaster },
+		{ Id = "Demolitionist", Name = "Demolitionist", Odds = 7.0, Description = CLASS_DESCRIPTIONS.Demolitionist, StatLines = CLASS_STAT_LINES.Demolitionist, RarityColor = CLASS_RARITY_COLOR.Demolitionist },
+		{ Id = "Prospector", Name = "Prospector", Odds = 3.9, Description = CLASS_DESCRIPTIONS.Prospector, StatLines = CLASS_STAT_LINES.Prospector, RarityColor = CLASS_RARITY_COLOR.Prospector },
+		{ Id = "DroneSpecialist", Name = "Drone Specialist", Odds = 1.0, Description = CLASS_DESCRIPTIONS.DroneSpecialist, StatLines = CLASS_STAT_LINES.DroneSpecialist, RarityColor = CLASS_RARITY_COLOR.DroneSpecialist },
+		{ Id = "UltimateFarmer", Name = "Ultimate Farmer", Odds = 0.1, Description = CLASS_DESCRIPTIONS.UltimateFarmer, StatLines = CLASS_STAT_LINES.UltimateFarmer, RarityColor = CLASS_RARITY_COLOR.UltimateFarmer },
 	}
 	DisplayConfig.ClassRollCostGems = 40
 end

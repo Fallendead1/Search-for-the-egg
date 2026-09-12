@@ -18,6 +18,7 @@ local InventoryService = require(script.Parent.InventoryService)
 local ChestService = require(script.Parent.ChestService)
 local CodeService = require(script.Parent.CodeService)
 local MetaProgressionService = require(script.Parent.MetaProgressionService)
+local DailyRewardService = require(script.Parent.DailyRewardService)
 local MonetizationService = require(script.Parent.MonetizationService)
 local RateLimitService = require(script.Parent.RateLimitService)
 local LeaderboardService = require(script.Parent.LeaderboardService)
@@ -102,6 +103,26 @@ remote(RemoteNames.Core_RequestBuyPermanentPerk).OnServerEvent:Connect(function(
 	if not ok then
 		remote(RemoteNames.Gameplay_Notification):FireClient(player, {
 			Text = PERMANENT_PERK_FAILURE_MESSAGES[err] or "Purchase failed.",
+			Kind = "Error",
+		})
+	end
+end)
+
+local DAILY_REWARD_FAILURE_MESSAGES: { [string]: string } = {
+	ProfileNotLoaded = "Still loading your profile -- try again in a moment.",
+	ClaimInProgress = "Hold on, already claiming.",
+	NotYetEligible = "Come back later for your next reward.",
+	AwardFailed = "Couldn't claim that reward right now.",
+}
+
+remote(RemoteNames.Core_RequestClaimDailyReward).OnServerEvent:Connect(function(player)
+	if not RateLimitService.CheckAndStamp(player, "ClaimDailyReward") then
+		return
+	end
+	local ok, err = DailyRewardService.Claim(player)
+	if not ok then
+		remote(RemoteNames.Gameplay_Notification):FireClient(player, {
+			Text = DAILY_REWARD_FAILURE_MESSAGES[err] or "Couldn't claim that reward right now.",
 			Kind = "Error",
 		})
 	end

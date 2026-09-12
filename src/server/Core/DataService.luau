@@ -16,6 +16,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local DataSchema = require(ReplicatedStorage.SearchForTheEgg.MetaConfig.DataSchema)
+local DailyRewardConfig = require(ReplicatedStorage.SearchForTheEgg.MetaConfig.DailyRewardConfig)
 local RemoteNames = require(ReplicatedStorage.SearchForTheEgg.Net.RemoteNames)
 local ProfileStore = require(script.Parent.ProfileStore)
 
@@ -119,6 +120,10 @@ function DataService.GetPublicSnapshot(player: Player)
 		-- Persistent one-time Developer Product grants (Kind = "Entitlement");
 		-- see MonetizationController.ownsEntitlement on the client.
 		EntitlementSummary = table.clone(profile.Entitlements),
+		-- Display-only -- DailyRewardService re-derives and re-validates
+		-- eligibility itself on Claim, never trusting this back from a client.
+		DailyRewardDay = profile.DailyReward.CurrentDay,
+		DailyRewardNextClaimAt = profile.DailyReward.LastClaimAt and (profile.DailyReward.LastClaimAt + DailyRewardConfig.ClaimIntervalSeconds) or 0,
 	}
 end
 
