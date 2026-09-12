@@ -20,6 +20,7 @@ local PlayerState = require(script.Parent.Parent.State.PlayerState)
 local WorldInteractionController = {}
 
 local player = Players.LocalPlayer
+local UpgradeBookController: any = nil
 
 local function getAnchorPart(instance: Instance): BasePart?
 	if instance:IsA("BasePart") then
@@ -77,6 +78,25 @@ local function initFarmer()
 	CollectionService:GetInstanceAddedSignal(RunConfig.TAGS.Farmer):Connect(attach)
 end
 
+-- Feather Supplies (Map2's physical equipment store) -- opens the existing
+-- Upgrade Book overlay, which already has Pitchfork/Dynamite/Vacuum/Drone/
+-- Feather Grabber/Tornado Launcher/Packing Bot pages with real Cash/Gems/
+-- Robux purchase controls. No second purchase system, just a physical
+-- trigger for the one that already exists.
+local function initEquipmentShop()
+	local function attach(instance: Instance)
+		attachPrompt(instance, "Shop", "Feather Supplies", function()
+			if UpgradeBookController then
+				UpgradeBookController.open()
+			end
+		end)
+	end
+	for _, instance in ipairs(CollectionService:GetTagged(RunConfig.TAGS.EquipmentShop)) do
+		attach(instance)
+	end
+	CollectionService:GetInstanceAddedSignal(RunConfig.TAGS.EquipmentShop):Connect(attach)
+end
+
 local lastEggPickupAttempt = 0
 local EGG_PICKUP_RETRY_SECONDS = 1
 
@@ -109,9 +129,11 @@ local function tickEggPickup()
 	Remotes.fireServer("Gameplay_RequestEggPickup")
 end
 
-function WorldInteractionController.init()
+function WorldInteractionController.init(upgradeBookController: any?)
+	UpgradeBookController = upgradeBookController
 	initSellStations()
 	initFarmer()
+	initEquipmentShop()
 	RunService.Heartbeat:Connect(tickEggPickup)
 end
 

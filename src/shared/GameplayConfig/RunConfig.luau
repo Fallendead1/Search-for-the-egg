@@ -149,6 +149,9 @@ RunConfig.TAGS = {
 	-- tell the client where to render the crate/chicken cosmetics.
 	ConveyorDeposit = "SFTE_ConveyorDeposit",
 	ConveyorOutput = "SFTE_ConveyorOutput",
+	-- Map2's Feather Supplies building -- opens the existing Upgrade Book
+	-- (see WorldInteractionController) rather than a second purchase UI.
+	EquipmentShop = "SFTE_EquipmentShop",
 }
 
 return RunConfig

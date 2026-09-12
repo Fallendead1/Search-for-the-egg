@@ -220,7 +220,15 @@ local function refreshHud()
 		cashLabel.Text = Format.cash(run.CashCents or 0)
 	end
 	if bagLabel then
-		bagLabel.Text = ("BAG %d/%d"):format(run.BagCount or 0, run.BagCapacity or DisplayConfig.BaseBagCapacity)
+		local capacity = run.BagCapacity or DisplayConfig.BaseBagCapacity
+		-- Infinite Bag reports capacity as math.huge -- "%d" on that produces
+		-- an int64-wraparound garbage number, not an error, so this needs an
+		-- explicit case rather than just formatting whatever comes back.
+		if capacity == math.huge then
+			bagLabel.Text = ("BAG %d/∞"):format(run.BagCount or 0)
+		else
+			bagLabel.Text = ("BAG %d/%d"):format(run.BagCount or 0, capacity)
+		end
 	end
 	if gemsLabel then
 		gemsLabel.Text = Format.compactNumber(profile.Gems or 0) .. " GEMS"

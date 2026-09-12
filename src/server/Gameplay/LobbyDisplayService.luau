@@ -68,6 +68,64 @@ local function updateQueueSigns(queues: Instance)
 	end
 end
 
+-- Old plain-board schema: RowN.Display.Text, a single combined string.
+local function updateSimpleBoard(board: Instance, statName: string, rows: { { UserId: number, Value: number } })
+	local any = false
+	for row = 1, BOARD_ROWS do
+		local rowPart = board:FindFirstChild("Row" .. row)
+		local label = rowPart and rowPart:FindFirstChild("Display") and rowPart.Display:FindFirstChild("Text")
+		if label then
+			any = true
+			local entry = rows[row]
+			if entry then
+				label.Text = ("%02d  %s   %s"):format(row, displayNameFor(entry.UserId), formatBoardValue(statName, entry.Value))
+			else
+				label.Text = ("%02d    --"):format(row)
+			end
+		end
+	end
+	return any
+end
+
+-- Imported sign schema (Feather Collected / total wins / Timerecord):
+-- AllStuds8.<SurfaceGui>.Frame.Top1..Top8, each with separate PlayerName/
+-- Place/Amount TextLabels. Only the first BOARD_ROWS (5) are ever driven --
+-- Top6-8 stay whatever placeholder text the imported asset shipped with.
+local function findTopRowsFrame(board: Instance): Instance?
+	local allStuds = board:FindFirstChild("AllStuds8")
+	if not allStuds then
+		return nil
+	end
+	local surfaceGui = allStuds:FindFirstChildWhichIsA("SurfaceGui")
+	return surfaceGui and surfaceGui:FindFirstChild("Frame")
+end
+
+local function updateImportedSign(board: Instance, statName: string, rows: { { UserId: number, Value: number } }): boolean
+	local rowsFrame = findTopRowsFrame(board)
+	if not rowsFrame then
+		return false
+	end
+	for row = 1, BOARD_ROWS do
+		local topFrame = rowsFrame:FindFirstChild("Top" .. row)
+		if topFrame then
+			local entry = rows[row]
+			local placeLabel = topFrame:FindFirstChild("Place")
+			local nameLabel = topFrame:FindFirstChild("PlayerName")
+			local amountLabel = topFrame:FindFirstChild("Amount")
+			if placeLabel then
+				placeLabel.Text = "#" .. tostring(row)
+			end
+			if nameLabel then
+				nameLabel.Text = entry and displayNameFor(entry.UserId) or "--"
+			end
+			if amountLabel then
+				amountLabel.Text = entry and formatBoardValue(statName, entry.Value) or "--"
+			end
+		end
+	end
+	return true
+end
+
 local function updateLeaderboards(leaderboards: Instance)
 	local ok, boards = pcall(function()
 		return CoreLocator.GetLeaderboardService().GetBoards()
@@ -81,17 +139,8 @@ local function updateLeaderboards(leaderboards: Instance)
 		local statName = statNameValue and statNameValue.Value
 		local rows = statName and boards[statName]
 		if rows then
-			for row = 1, BOARD_ROWS do
-				local rowPart = board:FindFirstChild("Row" .. row)
-				local label = rowPart and rowPart:FindFirstChild("Display") and rowPart.Display:FindFirstChild("Text")
-				if label then
-					local entry = rows[row]
-					if entry then
-						label.Text = ("%02d  %s   %s"):format(row, displayNameFor(entry.UserId), formatBoardValue(statName, entry.Value))
-					else
-						label.Text = ("%02d    --"):format(row)
-					end
-				end
+			if not updateImportedSign(board, statName, rows) then
+				updateSimpleBoard(board, statName, rows)
 			end
 		end
 	end

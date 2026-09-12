@@ -13,6 +13,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local Theme = require(script.Parent.Parent.UI.Theme)
 local Overlay = require(script.Parent.Parent.UI.Components.Overlay)
+local ItemPreview = require(script.Parent.Parent.UI.Components.ItemPreview)
 local UpgradeRow = require(script.Parent.Parent.UI.Components.UpgradeRow)
 local Remotes = require(script.Parent.Parent.Net.Remotes)
 local DisplayConfig = require(script.Parent.Parent.Data.DisplayConfig)
@@ -71,25 +72,34 @@ local function buildPurchaseGate(body: Instance, toolId: string, cashCostCents: 
 	panel.Size = UDim2.fromScale(1, 1)
 	panel.Parent = body
 
+	-- "Large 3D item display" (Section 5/9) -- a live-rotating clone of the
+	-- real SFTE_Assets model. Falls back to nothing (title/description just
+	-- use the full width) if that tool has no template yet.
+	local preview = ItemPreview.new(panel, toolId, UDim2.new(0, 90, 0, 90), UDim2.new(0, 0, 0, 0))
+	local textIndent = preview and 100 or 0
+	local textWidth = preview and -100 or 0
+
 	Theme.newLabel({
 		Text = toolId:upper(),
-		Size = UDim2.new(1, 0, 0, 40),
+		Size = UDim2.new(1, textWidth - 20, 0, 30),
+		Position = UDim2.new(0, textIndent, 0, 0),
+		TextXAlignment = preview and Enum.TextXAlignment.Left or Enum.TextXAlignment.Center,
 		Font = Theme.Font,
 		Parent = panel,
 	})
 	Theme.newLabel({
 		Text = description,
-		Size = UDim2.new(1, -40, 0, 40),
-		Position = UDim2.new(0.5, 0, 0, 44),
-		AnchorPoint = Vector2.new(0.5, 0),
+		Size = UDim2.new(1, textWidth - 20, 0, 60),
+		Position = UDim2.new(0, textIndent, 0, 32),
+		TextXAlignment = preview and Enum.TextXAlignment.Left or Enum.TextXAlignment.Center,
 		Font = Theme.FontBody,
 		Parent = panel,
 	})
 	if identity then
 		Theme.newLabel({
 			Text = identity,
-			Size = UDim2.new(1, -40, 0, 30),
-			Position = UDim2.new(0.5, 0, 0, 84),
+			Size = UDim2.new(1, -20, 0, 26),
+			Position = UDim2.new(0.5, 0, 0, 94),
 			AnchorPoint = Vector2.new(0.5, 0),
 			Font = Theme.FontBody,
 			TextColor = Theme.Colors.TextDark,
@@ -125,13 +135,17 @@ local function buildPurchaseGate(body: Instance, toolId: string, cashCostCents: 
 	end
 
 	local oneRoundRobux = DisplayConfig[toolId] and DisplayConfig[toolId].OneRoundRobux
+	local hasOneRoundProduct = MonetizationController.hasProduct(oneRoundKey)
 	local oneRoundButton = Theme.newButton({
-		Text = oneRoundRobux and ("1 ROUND - %d R$"):format(oneRoundRobux) or "1 ROUND",
+		-- Id = 0 in MonetizationConfig means this product isn't configured in
+		-- Roblox yet -- show COMING SOON instead of a fake price so players
+		-- never see a purchase option that can't actually complete.
+		Text = hasOneRoundProduct and oneRoundRobux and ("1 ROUND - %d R$"):format(oneRoundRobux)
+			or (oneRoundRobux and "COMING SOON" or "1 ROUND"),
 		Size = UDim2.new(0, 180, 1, 0),
 		Color = Theme.Colors.ButtonSecondary,
 		Parent = buttonRow,
 	})
-	local hasOneRoundProduct = MonetizationController.hasProduct(oneRoundKey)
 	Theme.setButtonEnabled(oneRoundButton, hasOneRoundProduct)
 	oneRoundButton.Activated:Connect(function()
 		MonetizationController.promptProduct(oneRoundKey)
@@ -160,13 +174,14 @@ local function buildPurchaseGate(body: Instance, toolId: string, cashCostCents: 
 		-- Permanent tool unlocks are Game Passes (see MonetizationConfig.GamePasses),
 		-- resolved server-side via MonetizationService.OwnsEntitlement.
 		local permanentRobux = DisplayConfig[toolId] and DisplayConfig[toolId].PermanentRobux
+		local hasPermanentPass = MonetizationController.hasGamePass(permanentKey)
 		local permanentButton = Theme.newButton({
-			Text = permanentRobux and ("PERMANENT - %d R$"):format(permanentRobux) or "PERMANENT",
+			Text = hasPermanentPass and permanentRobux and ("PERMANENT - %d R$"):format(permanentRobux)
+				or (permanentRobux and "COMING SOON" or "PERMANENT"),
 			Size = UDim2.new(0, 180, 1, 0),
 			Color = Theme.Colors.TextGold,
 			Parent = buttonRow,
 		})
-		local hasPermanentPass = MonetizationController.hasGamePass(permanentKey)
 		Theme.setButtonEnabled(permanentButton, hasPermanentPass)
 		permanentButton.Activated:Connect(function()
 			MonetizationController.promptGamePass(permanentKey)
