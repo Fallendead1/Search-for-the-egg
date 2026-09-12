@@ -208,4 +208,19 @@ AssetConfig.PartyDifficultyButtons = {
 	Normal = 136829264329931,
 }
 
+-- Full-panel background art (icon/title/border baked in) for Overlay.new's
+-- `art` param -- see Overlay.BackgroundArt. AspectRatio is the source PNG's
+-- real width/height so the overlay locks to that shape instead of
+-- stretching. Only screens whose dynamic content was reworked to sit inside
+-- the art's own body area use these -- see each controller for exact
+-- Body/Close positioning per panel.
+AssetConfig.FullPanels = {
+	DailyRewards = { Image = 82184970466069, AspectRatio = 1630 / 965 },
+	Shop = { Image = 108701496933554, AspectRatio = 1536 / 1024 },
+	Classes = { Image = 108225508442259, AspectRatio = 1536 / 1024 },
+	StatsBook = { Image = 120971931357103, AspectRatio = 1536 / 1024 },
+	BuyGems = { Image = 82214495164704, AspectRatio = 1100 / 1430 },
+	CreateParty = { Image = 88504003525900, AspectRatio = 1109 / 1418 },
+}
+
 return AssetConfig
